@@ -73,7 +73,7 @@ export async function sendMessages(env, messages) {
   return { sent, failed, error };
 }
 
-export const siteUrl = (env, request) => (env.SITE_URL || new URL(request.url).origin).replace(/\\/+$/, '');
+export const siteUrl = (env, request) => (env.SITE_URL || new URL(request.url).origin).replace(/\/+$/, '');
 
 const fmtDate = d => {
   const t = new Date(String(d) + 'T00:00:00Z');
