@@ -30,7 +30,6 @@ async function batchesPage(){
   coachSelect.onchange=loadCoaches;
   coachSave.onclick=async()=>{try{const coach_ids=[...coachList.querySelectorAll('input[type=checkbox]:checked')].map(x=>x.value);await api('batch-coaches',{method:'POST',body:JSON.stringify({batch_id:coachSelect.value,coach_ids})});toast('Coach assignments saved')}catch(e){toast(e.message)}};
 
- const select=$('#roster-batch'), roster=$('#roster-students'), save=$('#save-roster');
  async function loadRoster(){const bid=select.value;save.disabled=!bid;if(!bid){roster.innerHTML='<p class="empty">Choose a batch to load its students.</p>';return}const assigned=await api('batch-students?batch_id='+encodeURIComponent(bid));const batch=batches.find(b=>b.id===bid);const eligible=students.filter(s=>!batch?.center_id||s.center_id===batch.center_id);roster.innerHTML=eligible.length?eligible.map(s=>'<label class="roster-person"><input type="checkbox" value="'+esc(s.id)+'" '+(assigned.includes(s.id)?'checked':'')+'><span><b>'+esc(s.first_name+' '+s.last_name)+'</b><small>'+esc(centers.find(c=>c.id===s.center_id)?.name||s.center_id||'No center')+'</small></span></label>').join(''):'<p class="empty">No students found for this center. Add students first or check their center.</p>'; }
  select.onchange=loadRoster;
  save.onclick=async()=>{try{const ids=[...roster.querySelectorAll('input[type=checkbox]:checked')].map(c=>c.value);await api('batch-students',{method:'POST',body:JSON.stringify({batch_id:select.value,student_ids:ids})});toast('Batch roster saved');}catch(e){toast(e.message)}};
