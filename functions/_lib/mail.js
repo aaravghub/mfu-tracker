@@ -25,6 +25,12 @@ const base64url = bytes => {
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 };
+const base64 = s => {
+  const bytes = new TextEncoder().encode(s);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+};
 const enc = s => base64url(new TextEncoder().encode(s));
 const headerSafe = s => String(s || '').replace(/[\r\n]/g, ' ').replace(/[^\x20-\x7E]/g, '?');
 
@@ -48,12 +54,12 @@ export async function sendMessages(env, messages) {
         'Content-Type: text/plain; charset=UTF-8',
         'Content-Transfer-Encoding: base64',
         '',
-        enc(m.text || ''),
+        base64(m.text || ''),
         '--' + boundary,
         'Content-Type: text/html; charset=UTF-8',
         'Content-Transfer-Encoding: base64',
         '',
-        enc(m.html || ''),
+        base64(m.html || ''),
         '--' + boundary + '--',
         ''
       ].join('\r\n');
