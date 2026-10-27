@@ -56,7 +56,7 @@ export async function sendMessages(env, messages) {
         enc(m.html || ''),
         '--' + boundary + '--',
         ''
-      ].join('\\r\\n');
+      ].join('\r\n');
       const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + token, 'content-type': 'application/json' },
