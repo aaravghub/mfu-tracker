@@ -1,0 +1,1170 @@
+[
+  {
+    "id": "cmp-p1-grip-hold",
+    "apparatus": "pole",
+    "name": "Grip hold",
+    "level": 1,
+    "description": "Mount",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-p1-climb-up-down",
+    "apparatus": "pole",
+    "name": "Climb up/down",
+    "level": 1,
+    "description": "Mount · 8 classes",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-p1-baneguruji",
+    "apparatus": "pole",
+    "name": "Baneguruji",
+    "level": 1,
+    "description": "Yoga and balance · Left/right · 2 classes",
+    "sort_order": 3
+  },
+  {
+    "id": "cmp-p1-dronasan",
+    "apparatus": "pole",
+    "name": "Dronasan",
+    "level": 1,
+    "description": "Mount · 2 classes",
+    "sort_order": 4
+  },
+  {
+    "id": "cmp-p1-handstand-walk-backwards-and-adhi",
+    "apparatus": "pole",
+    "name": "Handstand walk backwards and Adhi",
+    "level": 1,
+    "description": "Mount",
+    "sort_order": 5
+  },
+  {
+    "id": "cmp-p1-hands-on-top-feet-on-mallakhamb-shoulder-and-forward-bend",
+    "apparatus": "pole",
+    "name": "Hands on Top, Feet on Mallakhamb Shoulder and forward bend",
+    "level": 1,
+    "description": "Yoga and balance · 3 classes",
+    "sort_order": 6
+  },
+  {
+    "id": "cmp-p1-tuck-on-the-side",
+    "apparatus": "pole",
+    "name": "Tuck on the side",
+    "level": 1,
+    "description": "Yoga and balance · 1 class",
+    "sort_order": 7
+  },
+  {
+    "id": "cmp-p2-dronasan-dismount",
+    "apparatus": "pole",
+    "name": "Dronasan Dismount",
+    "level": 2,
+    "description": "Dismount · 2 classes",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-p2-handstand-towards-pole-ulti-adhi",
+    "apparatus": "pole",
+    "name": "Handstand towards Pole Ulti Adhi",
+    "level": 2,
+    "description": "Mount · 3 classes",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-p2-sadhi-adhi",
+    "apparatus": "pole",
+    "name": "Sadhi Adhi",
+    "level": 2,
+    "description": "Combination · Both sides · 5 classes",
+    "sort_order": 3
+  },
+  {
+    "id": "cmp-p2-straddle-on-the-side",
+    "apparatus": "pole",
+    "name": "Straddle on the side",
+    "level": 2,
+    "description": "Yoga and balance · 2 classes",
+    "sort_order": 4
+  },
+  {
+    "id": "cmp-p2-one-foot-on-top-and-stand-up",
+    "apparatus": "pole",
+    "name": "One foot on top and stand up",
+    "level": 2,
+    "description": "Yoga and balance · Left/right · 4 classes",
+    "sort_order": 5
+  },
+  {
+    "id": "cmp-p3-dronasan-split",
+    "apparatus": "pole",
+    "name": "Dronasan Split",
+    "level": 3,
+    "description": "Yoga and balance · Both sides · 1 class",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-p3-ulti-adhi",
+    "apparatus": "pole",
+    "name": "Ulti Adhi",
+    "level": 3,
+    "description": "Yoga and balance · 2 classes",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-p3-sadhi-adhi-to-angsafa",
+    "apparatus": "pole",
+    "name": "Sadhi Adhi to Angsafa",
+    "level": 3,
+    "description": "Yoga and balance · 3 classes",
+    "sort_order": 3
+  },
+  {
+    "id": "cmp-p3-one-foot-on-top-and-jump-down",
+    "apparatus": "pole",
+    "name": "One foot on top and jump down",
+    "level": 3,
+    "description": "Dismount · Left/right · 2 classes",
+    "sort_order": 4
+  },
+  {
+    "id": "cmp-p3-straddle-on-the-top",
+    "apparatus": "pole",
+    "name": "Straddle on the top",
+    "level": 3,
+    "description": "Yoga and balance · Left/right · 2 classes",
+    "sort_order": 5
+  },
+  {
+    "id": "cmp-p3-sit-on-the-top",
+    "apparatus": "pole",
+    "name": "Sit on the Top",
+    "level": 3,
+    "description": "Yoga and balance · Left/right · 2 classes",
+    "sort_order": 6
+  },
+  {
+    "id": "cmp-p3-gurupakkad",
+    "apparatus": "pole",
+    "name": "Gurupakkad",
+    "level": 3,
+    "description": "Yoga and balance · Left/right · 4 classes",
+    "sort_order": 7
+  },
+  {
+    "id": "cmp-p3-one-hand-on-top-and-on-the-main-body-angasafa",
+    "apparatus": "pole",
+    "name": "One hand on top and on the main body, Angasafa",
+    "level": 3,
+    "description": "Yoga and balance · Both sides · 2 classes",
+    "sort_order": 8
+  },
+  {
+    "id": "cmp-p4-jump-to-dronasan",
+    "apparatus": "pole",
+    "name": "Jump to Dronasan",
+    "level": 4,
+    "description": "Mount · 3 classes",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-p4-ulti-adhi-5-sit-ups",
+    "apparatus": "pole",
+    "name": "Ulti Adhi 5 sit ups",
+    "level": 4,
+    "description": "Combination · 1 class",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-p4-jump-to-sadhi-adhi",
+    "apparatus": "pole",
+    "name": "Jump to Sadhi Adhi",
+    "level": 4,
+    "description": "Mount · Both sides · 2 classes",
+    "sort_order": 3
+  },
+  {
+    "id": "cmp-p4-push-landing",
+    "apparatus": "pole",
+    "name": "Push Landing",
+    "level": 4,
+    "description": "Dismount · 3 classes",
+    "sort_order": 4
+  },
+  {
+    "id": "cmp-p4-lower-bagli-tedhi",
+    "apparatus": "pole",
+    "name": "Lower Bagli Tedhi",
+    "level": 4,
+    "description": "Mount · Both sides · 4 classes",
+    "sort_order": 5
+  },
+  {
+    "id": "cmp-p4-both-feet-on-the-top",
+    "apparatus": "pole",
+    "name": "Both feet on the top",
+    "level": 4,
+    "description": "Yoga and balance · 4 classes",
+    "sort_order": 6
+  },
+  {
+    "id": "cmp-p4-both-feet-on-top-and-jump-down",
+    "apparatus": "pole",
+    "name": "Both feet on top and jump down",
+    "level": 4,
+    "description": "Dismount · 2 classes",
+    "sort_order": 7
+  },
+  {
+    "id": "cmp-p4-straddle-jump-twist",
+    "apparatus": "pole",
+    "name": "Straddle Jump Twist",
+    "level": 4,
+    "description": "Dismount · Left/right · 3 classes",
+    "sort_order": 8
+  },
+  {
+    "id": "cmp-p4-dharnurasan",
+    "apparatus": "pole",
+    "name": "Dharnurasan",
+    "level": 4,
+    "description": "Yoga and balance · 1 class",
+    "sort_order": 9
+  },
+  {
+    "id": "cmp-p4-gurupakkad-one-leg",
+    "apparatus": "pole",
+    "name": "Gurupakkad One leg",
+    "level": 4,
+    "description": "Yoga and balance · Left/right · 2 classes",
+    "sort_order": 10
+  },
+  {
+    "id": "cmp-p4-angsafa-tuck-hold",
+    "apparatus": "pole",
+    "name": "Angsafa Tuck Hold",
+    "level": 4,
+    "description": "Yoga and balance · Left/right · 1 class",
+    "sort_order": 11
+  },
+  {
+    "id": "cmp-p4-padmasan-before",
+    "apparatus": "pole",
+    "name": "Padmasan before",
+    "level": 4,
+    "description": "Yoga and balance · Both sides · 2 classes",
+    "sort_order": 12
+  },
+  {
+    "id": "cmp-p4-patangi-with-straight-back",
+    "apparatus": "pole",
+    "name": "Patangi with straight back",
+    "level": 4,
+    "description": "Yoga and balance · Left/right · 2 classes",
+    "sort_order": 13
+  },
+  {
+    "id": "cmp-p5-ulti-adhi-to-pashimotanasan",
+    "apparatus": "pole",
+    "name": "Ulti Adhi to Pashimotanasan",
+    "level": 5,
+    "description": "Yoga and balance · 2 classes",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-p5-jump-to-sadhi-adhi-from-1-ft",
+    "apparatus": "pole",
+    "name": "Jump to Sadhi Adhi from 1 ft",
+    "level": 5,
+    "description": "Mount · Left/right · 3 classes",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-p5-dasarang",
+    "apparatus": "pole",
+    "name": "Dasarang",
+    "level": 5,
+    "description": "Combination · Both sides · 12 classes",
+    "sort_order": 3
+  },
+  {
+    "id": "cmp-p5-phiraki",
+    "apparatus": "pole",
+    "name": "Phiraki",
+    "level": 5,
+    "description": "Combination · Both sides · 8 classes",
+    "sort_order": 4
+  },
+  {
+    "id": "cmp-p5-3-swing-free-hand-landing",
+    "apparatus": "pole",
+    "name": "3 Swing Free Hand Landing",
+    "level": 5,
+    "description": "Dismount · 4 classes",
+    "sort_order": 5
+  },
+  {
+    "id": "cmp-p5-tedhi-same-hand-and-same-leg",
+    "apparatus": "pole",
+    "name": "Tedhi (Same hand and same leg)",
+    "level": 5,
+    "description": "Mount · Both sides · 8 classes",
+    "sort_order": 6
+  },
+  {
+    "id": "cmp-p5-thakbandar-while-on-the-ground",
+    "apparatus": "pole",
+    "name": "Thakbandar while on the ground",
+    "level": 5,
+    "description": "Yoga and balance · Both sides · 2 classes",
+    "sort_order": 7
+  },
+  {
+    "id": "cmp-p5-thakbandar-landing",
+    "apparatus": "pole",
+    "name": "Thakbandar landing",
+    "level": 5,
+    "description": "Dismount · 2 classes",
+    "sort_order": 8
+  },
+  {
+    "id": "cmp-p5-tree-pose",
+    "apparatus": "pole",
+    "name": "Tree Pose",
+    "level": 5,
+    "description": "Yoga and balance · Both sides · 12 classes",
+    "sort_order": 9
+  },
+  {
+    "id": "cmp-p5-patangi-with-arched-back",
+    "apparatus": "pole",
+    "name": "Patangi with arched back",
+    "level": 5,
+    "description": "Yoga and balance · Left/right · 8 classes",
+    "sort_order": 10
+  },
+  {
+    "id": "cmp-p5-tuck-pike-or-split-jump",
+    "apparatus": "pole",
+    "name": "Tuck, Pike, or Split Jump",
+    "level": 5,
+    "description": "Dismount · 4 classes",
+    "sort_order": 11
+  },
+  {
+    "id": "cmp-p5-straddle-jump-forward",
+    "apparatus": "pole",
+    "name": "Straddle Jump Forward",
+    "level": 5,
+    "description": "Dismount · 3 classes",
+    "sort_order": 12
+  },
+  {
+    "id": "cmp-p5-two-hand-mayurasan",
+    "apparatus": "pole",
+    "name": "Two Hand Mayurasan",
+    "level": 5,
+    "description": "Yoga and balance · 12 classes",
+    "sort_order": 13
+  },
+  {
+    "id": "cmp-p5-baithizaap",
+    "apparatus": "pole",
+    "name": "Baithizaap",
+    "level": 5,
+    "description": "Drop/intercept · 12 classes",
+    "sort_order": 14
+  },
+  {
+    "id": "cmp-p5-bajrang-pakkad",
+    "apparatus": "pole",
+    "name": "Bajrang Pakkad",
+    "level": 5,
+    "description": "Yoga and balance · Left/right · 4 classes",
+    "sort_order": 15
+  },
+  {
+    "id": "cmp-p5-abdominal-plank-with-hands",
+    "apparatus": "pole",
+    "name": "Abdominal Plank with hands",
+    "level": 5,
+    "description": "Yoga and balance · 8 classes",
+    "sort_order": 16
+  },
+  {
+    "id": "cmp-p5-1ukasan-pathicha-tajwa-with-both-hands-on-pole",
+    "apparatus": "pole",
+    "name": "1ukasan, Pathicha Tajwa with both hands on pole",
+    "level": 5,
+    "description": "Yoga and balance · 12 classes",
+    "sort_order": 17
+  },
+  {
+    "id": "cmp-p5-ghoda-balance",
+    "apparatus": "pole",
+    "name": "Ghoda Balance",
+    "level": 5,
+    "description": "Yoga and balance · Left/right · 20 classes",
+    "sort_order": 18
+  },
+  {
+    "id": "cmp-p5-half-balance-tuck-hold",
+    "apparatus": "pole",
+    "name": "Half balance Tuck hold",
+    "level": 5,
+    "description": "Yoga and balance · Left/right · 12 classes",
+    "sort_order": 19
+  },
+  {
+    "id": "cmp-r1-climb-up-and-down",
+    "apparatus": "rope",
+    "name": "Climb up and down",
+    "level": 1,
+    "description": "Mount · 4 classes",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-r1-straddle-hold",
+    "apparatus": "rope",
+    "name": "Straddle Hold",
+    "level": 1,
+    "description": "Mount · 3 classes",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-r1-cross-on-the-ground",
+    "apparatus": "rope",
+    "name": "Cross on the ground",
+    "level": 1,
+    "description": "Yoga and balance · 2 classes",
+    "sort_order": 3
+  },
+  {
+    "id": "cmp-r1-angsafa",
+    "apparatus": "rope",
+    "name": "Angsafa",
+    "level": 1,
+    "description": "Yoga and balance · 3 classes",
+    "sort_order": 4
+  },
+  {
+    "id": "cmp-r2-jump-and-tuck-hold-catch",
+    "apparatus": "rope",
+    "name": "Jump and Tuck hold catch",
+    "level": 2,
+    "description": "Mount · 2 classes",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-r2-one-leg-cross",
+    "apparatus": "rope",
+    "name": "One leg cross",
+    "level": 2,
+    "description": "Yoga and balance · Both sides · 2 classes",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-r2-two-leg-cross",
+    "apparatus": "rope",
+    "name": "Two Leg cross",
+    "level": 2,
+    "description": "Yoga and balance · Left/right · 2 classes",
+    "sort_order": 3
+  },
+  {
+    "id": "cmp-r2-patangi",
+    "apparatus": "rope",
+    "name": "Patangi",
+    "level": 2,
+    "description": "Yoga and balance · Both sides · 2 classes",
+    "sort_order": 4
+  },
+  {
+    "id": "cmp-r2-gaurai-with-toes",
+    "apparatus": "rope",
+    "name": "Gaurai with toes",
+    "level": 2,
+    "description": "Yoga and balance · Both sides · 2 classes",
+    "sort_order": 5
+  },
+  {
+    "id": "cmp-r2-nidrasan",
+    "apparatus": "rope",
+    "name": "Nidrasan",
+    "level": 2,
+    "description": "Yoga and balance · Both sides · 1 class",
+    "sort_order": 6
+  },
+  {
+    "id": "cmp-r2-cross-to-adhi",
+    "apparatus": "rope",
+    "name": "Cross to Adhi",
+    "level": 2,
+    "description": "Combination · Both sides · 6 classes",
+    "sort_order": 7
+  },
+  {
+    "id": "cmp-r2-angsafa-upside-down",
+    "apparatus": "rope",
+    "name": "Angsafa upside down",
+    "level": 2,
+    "description": "Yoga and balance · 2 classes",
+    "sort_order": 8
+  },
+  {
+    "id": "cmp-r3-jump-and-straddle-hold-catch",
+    "apparatus": "rope",
+    "name": "Jump and Straddle hold catch",
+    "level": 3,
+    "description": "Mount · 2 classes",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-r3-cross-to-patangi",
+    "apparatus": "rope",
+    "name": "Cross to Patangi",
+    "level": 3,
+    "description": "Yoga and balance · Left/right · 4 classes",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-r3-shayanasan",
+    "apparatus": "rope",
+    "name": "Shayanasan",
+    "level": 3,
+    "description": "Yoga and balance · Left/right · 6 classes",
+    "sort_order": 3
+  },
+  {
+    "id": "cmp-r3-gurupakkad",
+    "apparatus": "rope",
+    "name": "Gurupakkad",
+    "level": 3,
+    "description": "Yoga and balance · Both sides · 3 classes",
+    "sort_order": 4
+  },
+  {
+    "id": "cmp-r3-gaurai-without-toes",
+    "apparatus": "rope",
+    "name": "Gaurai without toes",
+    "level": 3,
+    "description": "Yoga and balance · Both sides · 3 classes",
+    "sort_order": 5
+  },
+  {
+    "id": "cmp-r3-padmasan-without-toes",
+    "apparatus": "rope",
+    "name": "Padmasan without toes",
+    "level": 3,
+    "description": "Yoga and balance · Both sides · 3 classes",
+    "sort_order": 6
+  },
+  {
+    "id": "cmp-r3-vadi",
+    "apparatus": "rope",
+    "name": "Vadi",
+    "level": 3,
+    "description": "Yoga and balance · Both sides · 3 classes",
+    "sort_order": 7
+  },
+  {
+    "id": "cmp-r3-two-leg-rikeb",
+    "apparatus": "rope",
+    "name": "Two Leg Rikeb",
+    "level": 3,
+    "description": "Yoga and balance · Both sides · 4 classes",
+    "sort_order": 8
+  },
+  {
+    "id": "cmp-r3-angasafa-dismount",
+    "apparatus": "rope",
+    "name": "Angasafa Dismount",
+    "level": 3,
+    "description": "Dismount · 4 weeks",
+    "sort_order": 9
+  },
+  {
+    "id": "cmp-r3-adhi-to-cross",
+    "apparatus": "rope",
+    "name": "Adhi to Cross",
+    "level": 3,
+    "description": "Combination · Left/right · 5 weeks",
+    "sort_order": 10
+  },
+  {
+    "id": "cmp-r4-one-hand-straddle",
+    "apparatus": "rope",
+    "name": "One hand straddle",
+    "level": 4,
+    "description": "Mount · 2 classes",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-r4-cross-to-vadi",
+    "apparatus": "rope",
+    "name": "Cross to Vadi",
+    "level": 4,
+    "description": "Drop/intercept · Both sides · 8 classes",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-r4-shayanasan-to-vadi",
+    "apparatus": "rope",
+    "name": "Shayanasan to vadi",
+    "level": 4,
+    "description": "Combination · Left/right · 8 classes",
+    "sort_order": 3
+  },
+  {
+    "id": "cmp-r4-shayanasan-to-adhi",
+    "apparatus": "rope",
+    "name": "Shayanasan to adhi",
+    "level": 4,
+    "description": "Combination · Left/right · 8 classes",
+    "sort_order": 4
+  },
+  {
+    "id": "cmp-r4-one-leg-rikeb",
+    "apparatus": "rope",
+    "name": "One Leg Rikeb",
+    "level": 4,
+    "description": "Yoga and balance · Both sides · 4 classes",
+    "sort_order": 5
+  },
+  {
+    "id": "cmp-r4-nidrasan-to-vadi",
+    "apparatus": "rope",
+    "name": "Nidrasan to vadi",
+    "level": 4,
+    "description": "Drop/intercept · Left/right · 3 classes",
+    "sort_order": 6
+  },
+  {
+    "id": "cmp-r4-adhi-to-patangi",
+    "apparatus": "rope",
+    "name": "Adhi to Patangi",
+    "level": 4,
+    "description": "Combination · Left/right · 4 classes",
+    "sort_order": 7
+  },
+  {
+    "id": "cmp-r4-adhi-to-padmasan",
+    "apparatus": "rope",
+    "name": "Adhi to Padmasan",
+    "level": 4,
+    "description": "Combination · Left/right · 3 classes",
+    "sort_order": 8
+  },
+  {
+    "id": "cmp-r4-shavasan",
+    "apparatus": "rope",
+    "name": "Shavasan",
+    "level": 4,
+    "description": "Combination · Left/right · 4 classes",
+    "sort_order": 9
+  },
+  {
+    "id": "cmp-r4-front-plank",
+    "apparatus": "rope",
+    "name": "Front Plank",
+    "level": 4,
+    "description": "Yoga and balance · 4 classes",
+    "sort_order": 10
+  },
+  {
+    "id": "cmp-r4-frog-jump",
+    "apparatus": "rope",
+    "name": "Frog Jump",
+    "level": 4,
+    "description": "Dismount · 4 classes",
+    "sort_order": 11
+  },
+  {
+    "id": "cmp-r5-on-hand-padmasan",
+    "apparatus": "rope",
+    "name": "On hand padmasan",
+    "level": 5,
+    "description": "Mount · 3 classes",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-r5-jump-180-twist-stradle-hold-catch",
+    "apparatus": "rope",
+    "name": "Jump 180 twist stradle hold catch",
+    "level": 5,
+    "description": "Mount · Both sides · 4 classes",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-r5-cross-to-2-leg-rikeb",
+    "apparatus": "rope",
+    "name": "Cross to 2 leg rikeb",
+    "level": 5,
+    "description": "Drop/intercept · Left/right · 12 classes",
+    "sort_order": 3
+  },
+  {
+    "id": "cmp-r5-upper-cross",
+    "apparatus": "rope",
+    "name": "Upper Cross",
+    "level": 5,
+    "description": "Yoga and balance · Left/right · 2 classes",
+    "sort_order": 4
+  },
+  {
+    "id": "cmp-r5-shayanasan-to-nidrasan",
+    "apparatus": "rope",
+    "name": "Shayanasan to nidrasan",
+    "level": 5,
+    "description": "Combination · Left/right · 4 classes",
+    "sort_order": 5
+  },
+  {
+    "id": "cmp-r5-vadi-to-rikeb",
+    "apparatus": "rope",
+    "name": "Vadi to rikeb",
+    "level": 5,
+    "description": "Drop/intercept · Both sides · 4 classes",
+    "sort_order": 6
+  },
+  {
+    "id": "cmp-r5-one-leg-rikeb",
+    "apparatus": "rope",
+    "name": "One Leg Rikeb",
+    "level": 5,
+    "description": "Yoga and balance · Both sides · 3 classes",
+    "sort_order": 7
+  },
+  {
+    "id": "cmp-r5-one-leg-rikeb-natrajasan-y-lever-leg-behind-neck",
+    "apparatus": "rope",
+    "name": "One Leg Rikeb: Natrajasan, y-lever, leg behind neck",
+    "level": 5,
+    "description": "Yoga and balance · Both sides · 3 classes",
+    "sort_order": 8
+  },
+  {
+    "id": "cmp-r5-nidrasan-to-vadi",
+    "apparatus": "rope",
+    "name": "Nidrasan to vadi",
+    "level": 5,
+    "description": "Drop/intercept · Left/right · 3 classes",
+    "sort_order": 9
+  },
+  {
+    "id": "cmp-r5-vadi-to-nidrasan",
+    "apparatus": "rope",
+    "name": "Vadi to nidrasan",
+    "level": 5,
+    "description": "Drop/intercept · Left/right · 3 classes",
+    "sort_order": 10
+  },
+  {
+    "id": "cmp-r5-paschimotanasan-to-adhi",
+    "apparatus": "rope",
+    "name": "Paschimotanasan to Adhi",
+    "level": 5,
+    "description": "Combination · Left/right · 4 classes",
+    "sort_order": 11
+  },
+  {
+    "id": "cmp-r5-adhi-to-patangi",
+    "apparatus": "rope",
+    "name": "Adhi to Patangi",
+    "level": 5,
+    "description": "Combination · Left/right · 4 classes",
+    "sort_order": 12
+  },
+  {
+    "id": "cmp-r5-padmasan-to-adhi",
+    "apparatus": "rope",
+    "name": "Padmasan to Adhi",
+    "level": 5,
+    "description": "Combination · Left/right · 4 classes",
+    "sort_order": 13
+  },
+  {
+    "id": "cmp-r5-dhanurasan",
+    "apparatus": "rope",
+    "name": "Dhanurasan",
+    "level": 5,
+    "description": "Combination · Left/right · 6 classes",
+    "sort_order": 14
+  },
+  {
+    "id": "cmp-r5-back-plank",
+    "apparatus": "rope",
+    "name": "Back Plank",
+    "level": 5,
+    "description": "Yoga and balance · 8 classes",
+    "sort_order": 15
+  },
+  {
+    "id": "cmp-r5-patangi-kalat",
+    "apparatus": "rope",
+    "name": "Patangi Kalat",
+    "level": 5,
+    "description": "Dismount · 12 classes",
+    "sort_order": 16
+  },
+  {
+    "id": "cmp-r5-mayurpankhi",
+    "apparatus": "rope",
+    "name": "Mayurpankhi",
+    "level": 5,
+    "description": "Dismount · 2 classes",
+    "sort_order": 17
+  },
+  {
+    "id": "cmp-y1-dronasana",
+    "apparatus": "yoga",
+    "name": "Dronasana",
+    "level": 1,
+    "description": "Forward bend",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-y1-padahastana",
+    "apparatus": "yoga",
+    "name": "Padahastana",
+    "level": 1,
+    "description": "Forward bend",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-y1-cobra-pose",
+    "apparatus": "yoga",
+    "name": "Cobra Pose",
+    "level": 1,
+    "description": "Backward bend",
+    "sort_order": 3
+  },
+  {
+    "id": "cmp-y1-side-split-left-bend",
+    "apparatus": "yoga",
+    "name": "Side Split - Left Bend",
+    "level": 1,
+    "description": "Side bend",
+    "sort_order": 4
+  },
+  {
+    "id": "cmp-y1-side-split-left-bend-listed-again-in-source",
+    "apparatus": "yoga",
+    "name": "Side Split - Left Bend (listed again in source)",
+    "level": 1,
+    "description": "Side bend",
+    "sort_order": 5
+  },
+  {
+    "id": "cmp-y1-gomukhasana",
+    "apparatus": "yoga",
+    "name": "Gomukhasana",
+    "level": 1,
+    "description": "Shoulder flexibility",
+    "sort_order": 6
+  },
+  {
+    "id": "cmp-y1-sit-on-the-ground-and-move-hands-in-180-degrees",
+    "apparatus": "yoga",
+    "name": "Sit on the ground and move hands in 180 degrees",
+    "level": 1,
+    "description": "Shoulder flexibility",
+    "sort_order": 7
+  },
+  {
+    "id": "cmp-y1-side-split",
+    "apparatus": "yoga",
+    "name": "Side Split",
+    "level": 1,
+    "description": "Hip mobility",
+    "sort_order": 8
+  },
+  {
+    "id": "cmp-y1-forward-split-left-leg-forward",
+    "apparatus": "yoga",
+    "name": "Forward Split - Left leg forward",
+    "level": 1,
+    "description": "Hip mobility",
+    "sort_order": 9
+  },
+  {
+    "id": "cmp-y1-forward-split-right-leg-forward",
+    "apparatus": "yoga",
+    "name": "Forward Split - Right leg forward",
+    "level": 1,
+    "description": "Hip mobility",
+    "sort_order": 10
+  },
+  {
+    "id": "cmp-y1-tree-pose",
+    "apparatus": "yoga",
+    "name": "Tree Pose",
+    "level": 1,
+    "description": "Stand up",
+    "sort_order": 11
+  },
+  {
+    "id": "cmp-y1-l-hold",
+    "apparatus": "yoga",
+    "name": "L Hold",
+    "level": 1,
+    "description": "Stand up",
+    "sort_order": 12
+  },
+  {
+    "id": "cmp-y1-straddle-with-butt-on-ground-and-lift-legs",
+    "apparatus": "yoga",
+    "name": "Straddle with butt on ground and lift legs",
+    "level": 1,
+    "description": "Core",
+    "sort_order": 13
+  },
+  {
+    "id": "cmp-y1-bakasana",
+    "apparatus": "yoga",
+    "name": "Bakasana",
+    "level": 1,
+    "description": "Core",
+    "sort_order": 14
+  },
+  {
+    "id": "cmp-y1-halasana",
+    "apparatus": "yoga",
+    "name": "Halasana",
+    "level": 1,
+    "description": "Core",
+    "sort_order": 15
+  },
+  {
+    "id": "cmp-y2-paschimotanasan",
+    "apparatus": "yoga",
+    "name": "Paschimotanasan",
+    "level": 2,
+    "description": "Forward bend",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-y2-akarna-dhanurasana",
+    "apparatus": "yoga",
+    "name": "Akarna Dhanurasana",
+    "level": 2,
+    "description": "Forward bend",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-y2-camel-back",
+    "apparatus": "yoga",
+    "name": "Camel Back",
+    "level": 2,
+    "description": "Backward bend",
+    "sort_order": 3
+  },
+  {
+    "id": "cmp-y2-dhanurasana",
+    "apparatus": "yoga",
+    "name": "Dhanurasana",
+    "level": 2,
+    "description": "Backward bend",
+    "sort_order": 4
+  },
+  {
+    "id": "cmp-y2-trikonasan",
+    "apparatus": "yoga",
+    "name": "Trikonasan",
+    "level": 2,
+    "description": "Side bend",
+    "sort_order": 5
+  },
+  {
+    "id": "cmp-y2-ardha-machindrasana",
+    "apparatus": "yoga",
+    "name": "Ardha Machindrasana",
+    "level": 2,
+    "description": "Shoulder flexibility",
+    "sort_order": 6
+  },
+  {
+    "id": "cmp-y2-garudasana",
+    "apparatus": "yoga",
+    "name": "Garudasana",
+    "level": 2,
+    "description": "Shoulder flexibility",
+    "sort_order": 7
+  },
+  {
+    "id": "cmp-y2-butterfly-kicks",
+    "apparatus": "yoga",
+    "name": "Butterfly Kicks",
+    "level": 2,
+    "description": "Hip mobility",
+    "sort_order": 8
+  },
+  {
+    "id": "cmp-y2-butterfly-and-forward-bend",
+    "apparatus": "yoga",
+    "name": "Butterfly and forward bend",
+    "level": 2,
+    "description": "Hip mobility",
+    "sort_order": 9
+  },
+  {
+    "id": "cmp-y2-veerbhadrasana",
+    "apparatus": "yoga",
+    "name": "Veerbhadrasana",
+    "level": 2,
+    "description": "Stand up",
+    "sort_order": 10
+  },
+  {
+    "id": "cmp-y2-mayurasana",
+    "apparatus": "yoga",
+    "name": "Mayurasana",
+    "level": 2,
+    "description": "Core",
+    "sort_order": 11
+  },
+  {
+    "id": "cmp-y3-raj-kapotanasan",
+    "apparatus": "yoga",
+    "name": "Raj Kapotanasan",
+    "level": 3,
+    "description": "Backward bend",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-y3-bridge",
+    "apparatus": "yoga",
+    "name": "Bridge",
+    "level": 3,
+    "description": "Backward bend",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-y3-ek-padshirasana",
+    "apparatus": "yoga",
+    "name": "Ek Padshirasana",
+    "level": 3,
+    "description": "Hip mobility",
+    "sort_order": 3
+  },
+  {
+    "id": "cmp-y3-padmasana-lift",
+    "apparatus": "yoga",
+    "name": "Padmasana Lift",
+    "level": 3,
+    "description": "Hip mobility",
+    "sort_order": 4
+  },
+  {
+    "id": "cmp-y3-baddha-padmasana",
+    "apparatus": "yoga",
+    "name": "Baddha Padmasana",
+    "level": 3,
+    "description": "Hip mobility",
+    "sort_order": 5
+  },
+  {
+    "id": "cmp-y3-arabesque",
+    "apparatus": "yoga",
+    "name": "Arabesque",
+    "level": 3,
+    "description": "Stand up",
+    "sort_order": 6
+  },
+  {
+    "id": "cmp-y3-natarajasana",
+    "apparatus": "yoga",
+    "name": "Natarajasana",
+    "level": 3,
+    "description": "Stand up",
+    "sort_order": 7
+  },
+  {
+    "id": "cmp-y3-y-lever",
+    "apparatus": "yoga",
+    "name": "Y Lever",
+    "level": 3,
+    "description": "Stand up",
+    "sort_order": 8
+  },
+  {
+    "id": "cmp-y3-straddle-bakasana",
+    "apparatus": "yoga",
+    "name": "Straddle Bakasana",
+    "level": 3,
+    "description": "Core",
+    "sort_order": 9
+  },
+  {
+    "id": "cmp-y3-ek-hati-mayurasana",
+    "apparatus": "yoga",
+    "name": "Ek Hati Mayurasana",
+    "level": 3,
+    "description": "Core",
+    "sort_order": 10
+  },
+  {
+    "id": "cmp-y4-vruschikasana",
+    "apparatus": "yoga",
+    "name": "Vruschikasana",
+    "level": 4,
+    "description": "Backward bend",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-y4-bridge-with-one-leg-up",
+    "apparatus": "yoga",
+    "name": "Bridge with one leg up",
+    "level": 4,
+    "description": "Backward bend",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-y4-chakorasana",
+    "apparatus": "yoga",
+    "name": "Chakorasana",
+    "level": 4,
+    "description": "Hip mobility",
+    "sort_order": 3
+  },
+  {
+    "id": "cmp-y4-one-hand-straddle",
+    "apparatus": "yoga",
+    "name": "One Hand Straddle",
+    "level": 4,
+    "description": "Core",
+    "sort_order": 4
+  },
+  {
+    "id": "cmp-y4-side-bakasana",
+    "apparatus": "yoga",
+    "name": "Side Bakasana",
+    "level": 4,
+    "description": "Core",
+    "sort_order": 5
+  },
+  {
+    "id": "cmp-y5-shalabhasana",
+    "apparatus": "yoga",
+    "name": "Shalabhasana",
+    "level": 5,
+    "description": "Backward bend",
+    "sort_order": 1
+  },
+  {
+    "id": "cmp-y5-scorpion",
+    "apparatus": "yoga",
+    "name": "Scorpion",
+    "level": 5,
+    "description": "Stand up",
+    "sort_order": 2
+  },
+  {
+    "id": "cmp-y5-padma-mayurasana",
+    "apparatus": "yoga",
+    "name": "Padma Mayurasana",
+    "level": 5,
+    "description": "Core",
+    "sort_order": 3
+  }
+]
