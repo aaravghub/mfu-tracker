@@ -2,7 +2,7 @@ import { randomHex, sha256 } from './util.js';
 
 const COOKIE = 'mfu_session';
 export const sessionCookie = (token, seconds) =>
-  `${COOKIE}=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${seconds}`;
+  `${COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${seconds}`;
 
 export function readToken(request) {
   const c = (request.headers.get('Cookie') || '').split(';').map(x => x.trim()).find(x => x.startsWith(COOKIE + '='));
