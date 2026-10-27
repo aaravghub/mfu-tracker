@@ -97,7 +97,7 @@ const para = s => esc(s).split(/\n{2,}/).map(p => `<p style="margin:0 0 14px;lin
 const button = (href, label, color = '#f26b21') =>
   isHttpUrl(href) ? `<a href="${esc(href)}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-weight:700;padding:10px 16px;border-radius:8px;font-size:14px">${esc(label)}</a>` : '';
 const section = t => `<h3 style="margin:26px 0 10px;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:#164e8a">${esc(t)}</h3>`;
-const card = inner => `<div style="border:1px solid #e5eaf1;border-radius:12px;padding:14px 16px;margin:0 0 10px">${inner}</div>`;
+const card = inner => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #e5eaf1;border-radius:12px;margin:0 0 10px"><tr><td style="padding:14px 16px">${inner}</td></tr></table>`;
 
 // Builds one email (html + plain text). `parts` = { message, events, links, shop, portalUrl }
 export function renderEmail({ greetingName, message, events = [], links = [], shop = [], portalUrl }) {
@@ -147,6 +147,6 @@ export function renderEmail({ greetingName, message, events = [], links = [], sh
 
 export const wrap = inner =>
   `<!doctype html><html><body style="margin:0;background:#f6f8fb;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#172337">` +
-  `<div style="max-width:600px;margin:0 auto;padding:24px 16px"><div style="background:#f26b21;border-radius:14px 14px 0 0;padding:18px 24px;display:flex;align-items:center;gap:14px;color:#fff;font-weight:800;font-size:18px"><img src="https://mfu-tracker.pages.dev/mfu-logo.png" alt="Mallakhamb Federation USA logo" width="54" height="54" style="display:block;width:54px;height:54px;object-fit:contain;background:#fff;border-radius:8px;padding:3px"><span>Mallakhamb Federation USA</span></div>` +
-  `<div style="background:#ffffff;border:1px solid #e5eaf1;border-top:0;border-radius:0 0 14px 14px;padding:24px;font-size:15px">${inner}</div>` +
-  `<p style="text-align:center;color:#8794a8;font-size:12px;margin-top:14px">You are receiving this because your child is enrolled with MFU.</p></div></body></html>`;
+  `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;margin:0 auto"><tr><td style="padding:24px 16px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="background:#f26b21;border-radius:14px 14px 0 0;padding:18px 24px;color:#fff;font-weight:800;font-size:18px"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td valign="middle" style="padding-right:14px"><img src="https://mfu-tracker.pages.dev/mfu-logo.png" alt="Mallakhamb Federation USA logo" width="54" height="54" style="display:block;width:54px;height:54px;background:#fff;border-radius:8px;padding:3px"></td><td valign="middle" style="color:#fff;font-weight:800;font-size:18px">Mallakhamb Federation USA</td></tr></table></td></tr></table>` +
+  `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="background:#ffffff;border:1px solid #e5eaf1;border-top:0;border-radius:0 0 14px 14px;padding:24px;font-size:15px">${inner}</td></tr></table>` +
+  `<p style="text-align:center;color:#8794a8;font-size:12px;margin-top:14px">You are receiving this because your child is enrolled with MFU.</p></td></tr></table></body></html>`;
