@@ -18,3 +18,30 @@ button:disabled{opacity:.5;cursor:not-allowed}
 textarea{resize:vertical;line-height:1.5}
 .card h3{font-family:Manrope,sans-serif}
 @media(max-width:650px){#content{padding:16px}.roster-list{grid-template-columns:1fr}.roster-controls{grid-template-columns:1fr}.welcome{align-items:flex-start;flex-direction:column}.welcome .btn{width:100%}}
+
+:root{color-scheme:light;--surface:#fff;--input-bg:#fff}
+:root[data-theme="dark"]{color-scheme:dark;--ink:#e8edf5;--muted:#9ba9bd;--line:#2a3548;--bg:#0c1220;--white:#111a2b;--surface:#141e30;--input-bg:#101827;--orange:#ff8748;--blue:#78b7ff}
+:root[data-theme="dark"] body{background:var(--bg);color:var(--ink)}
+:root[data-theme="dark"] .sidebar,:root[data-theme="dark"] header,:root[data-theme="dark"] .card,:root[data-theme="dark"] .stat,:root[data-theme="dark"] .timer-card,:root[data-theme="dark"] .table-wrap{background:var(--surface);color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] nav button,:root[data-theme="dark"] #logout{color:#b8c4d6}
+:root[data-theme="dark"] nav button:hover,:root[data-theme="dark"] nav button.active,:root[data-theme="dark"] .skill-tabs button.active{background:#3b291f;color:#ffad7a}
+:root[data-theme="dark"] .pdf{background:#172d47;color:#a9d2ff}
+:root[data-theme="dark"] .pill{background:#17352e;color:#7ce0b5}
+:root[data-theme="dark"] .toolbar input,:root[data-theme="dark"] .toolbar select,:root[data-theme="dark"] input,:root[data-theme="dark"] select,:root[data-theme="dark"] textarea{background:var(--input-bg);color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] th{background:#101827;color:#a4b1c4}
+:root[data-theme="dark"] td{border-color:var(--line)}
+:root[data-theme="dark"] .btn.secondary,:root[data-theme="dark"] .skill-tabs button{background:#253247;color:#e8edf5;border-color:#334159}
+:root[data-theme="dark"] .roster-person{background:#111a2b;border-color:var(--line)}
+:root[data-theme="dark"] .roster-person:has(input:checked){background:#35271f;border-color:#a95c35}
+:root[data-theme="dark"] .roster-person b{color:var(--ink)}
+:root[data-theme="dark"] .timer-card.counter{background:linear-gradient(140deg,#182337,#2a201c)}
+:root[data-theme="dark"] .error{color:#ff9a9a!important}
+.header-actions{display:flex;align-items:center;gap:12px}
+body,.sidebar,header,.card,.stat,.timer-card,.table-wrap,input,select,textarea,nav button,.pdf{transition:background-color .25s ease,color .25s ease,border-color .25s ease,box-shadow .25s ease}
+.card,.stat,.timer-card,.roster-person,.btn,nav button{animation:rise-in .42s cubic-bezier(.2,.75,.25,1) both}
+.card:nth-child(2),.stat:nth-child(2){animation-delay:.04s}.card:nth-child(3),.stat:nth-child(3){animation-delay:.08s}.card:nth-child(4),.stat:nth-child(4){animation-delay:.12s}
+.btn{transition:transform .18s ease,box-shadow .18s ease,background-color .2s ease}
+.btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 7px 16px #1723371a}
+nav button:hover{transform:translateX(2px)}
+@keyframes rise-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
