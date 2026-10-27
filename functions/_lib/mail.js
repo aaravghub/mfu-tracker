@@ -147,6 +147,6 @@ export function renderEmail({ greetingName, message, events = [], links = [], sh
 
 export const wrap = inner =>
   `<!doctype html><html><body style="margin:0;background:#f6f8fb;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#172337">` +
-  `<div style="max-width:600px;margin:0 auto;padding:24px 16px"><div style="background:#f26b21;border-radius:14px 14px 0 0;padding:18px 24px;display:flex;align-items:center;gap:14px;color:#fff;font-weight:800;font-size:18px"><img src="https://mfu-tracker.pages.dev/mfu-logo.svg" alt="Mallakhamb Federation USA logo" width="54" height="54" style="display:block;width:54px;height:54px;object-fit:contain;background:#fff;border-radius:8px;padding:3px"><span>Mallakhamb Federation USA</span></div>` +
+  `<div style="max-width:600px;margin:0 auto;padding:24px 16px"><div style="background:#f26b21;border-radius:14px 14px 0 0;padding:18px 24px;display:flex;align-items:center;gap:14px;color:#fff;font-weight:800;font-size:18px"><img src="https://mfu-tracker.pages.dev/mfu-logo.png" alt="Mallakhamb Federation USA logo" width="54" height="54" style="display:block;width:54px;height:54px;object-fit:contain;background:#fff;border-radius:8px;padding:3px"><span>Mallakhamb Federation USA</span></div>` +
   `<div style="background:#ffffff;border:1px solid #e5eaf1;border-top:0;border-radius:0 0 14px 14px;padding:24px;font-size:15px">${inner}</div>` +
   `<p style="text-align:center;color:#8794a8;font-size:12px;margin-top:14px">You are receiving this because your child is enrolled with MFU.</p></div></body></html>`;
