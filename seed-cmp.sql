@@ -1,6 +1,5 @@
--- Complete Common Minimum Program skill entries transcribed from the uploaded CMP PDF (pages 11-15).
--- Covers all Pole, Rope, and Yoga entries across levels 1-5. Existing skill rows are preserved.
--- Skill names and descriptions remain editable in Skill Library.
+-- Common Minimum Program skill seed data, split into small SQL statements for Cloudflare D1 Console.
+-- Re-running is safe: duplicate skill IDs are ignored.
 INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-p1-grip-hold', 'pole', 'Grip hold', 1, 'Mount', 1),
 ('cmp-p1-climb-up-down', 'pole', 'Climb up/down', 1, 'Mount · 8 classes', 2),
@@ -11,7 +10,10 @@ INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-p1-tuck-on-the-side', 'pole', 'Tuck on the side', 1, 'Yoga and balance · 1 class', 7),
 ('cmp-p2-dronasan-dismount', 'pole', 'Dronasan Dismount', 2, 'Dismount · 2 classes', 1),
 ('cmp-p2-handstand-towards-pole-ulti-adhi', 'pole', 'Handstand towards Pole Ulti Adhi', 2, 'Mount · 3 classes', 2),
-('cmp-p2-sadhi-adhi', 'pole', 'Sadhi Adhi', 2, 'Combination · Both sides · 5 classes', 3),
+('cmp-p2-sadhi-adhi', 'pole', 'Sadhi Adhi', 2, 'Combination · Both sides · 5 classes', 3)
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-p2-straddle-on-the-side', 'pole', 'Straddle on the side', 2, 'Yoga and balance · 2 classes', 4),
 ('cmp-p2-one-foot-on-top-and-stand-up', 'pole', 'One foot on top and stand up', 2, 'Yoga and balance · Left/right · 4 classes', 5),
 ('cmp-p3-dronasan-split', 'pole', 'Dronasan Split', 3, 'Yoga and balance · Both sides · 1 class', 1),
@@ -21,7 +23,10 @@ INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-p3-straddle-on-the-top', 'pole', 'Straddle on the top', 3, 'Yoga and balance · Left/right · 2 classes', 5),
 ('cmp-p3-sit-on-the-top', 'pole', 'Sit on the Top', 3, 'Yoga and balance · Left/right · 2 classes', 6),
 ('cmp-p3-gurupakkad', 'pole', 'Gurupakkad', 3, 'Yoga and balance · Left/right · 4 classes', 7),
-('cmp-p3-one-hand-on-top-and-on-the-main-body-angasafa', 'pole', 'One hand on top and on the main body, Angasafa', 3, 'Yoga and balance · Both sides · 2 classes', 8),
+('cmp-p3-one-hand-on-top-and-on-the-main-body-angasafa', 'pole', 'One hand on top and on the main body, Angasafa', 3, 'Yoga and balance · Both sides · 2 classes', 8)
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-p4-jump-to-dronasan', 'pole', 'Jump to Dronasan', 4, 'Mount · 3 classes', 1),
 ('cmp-p4-ulti-adhi-5-sit-ups', 'pole', 'Ulti Adhi 5 sit ups', 4, 'Combination · 1 class', 2),
 ('cmp-p4-jump-to-sadhi-adhi', 'pole', 'Jump to Sadhi Adhi', 4, 'Mount · Both sides · 2 classes', 3),
@@ -31,7 +36,10 @@ INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-p4-both-feet-on-top-and-jump-down', 'pole', 'Both feet on top and jump down', 4, 'Dismount · 2 classes', 7),
 ('cmp-p4-straddle-jump-twist', 'pole', 'Straddle Jump Twist', 4, 'Dismount · Left/right · 3 classes', 8),
 ('cmp-p4-dharnurasan', 'pole', 'Dharnurasan', 4, 'Yoga and balance · 1 class', 9),
-('cmp-p4-gurupakkad-one-leg', 'pole', 'Gurupakkad One leg', 4, 'Yoga and balance · Left/right · 2 classes', 10),
+('cmp-p4-gurupakkad-one-leg', 'pole', 'Gurupakkad One leg', 4, 'Yoga and balance · Left/right · 2 classes', 10)
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-p4-angsafa-tuck-hold', 'pole', 'Angsafa Tuck Hold', 4, 'Yoga and balance · Left/right · 1 class', 11),
 ('cmp-p4-padmasan-before', 'pole', 'Padmasan before', 4, 'Yoga and balance · Both sides · 2 classes', 12),
 ('cmp-p4-patangi-with-straight-back', 'pole', 'Patangi with straight back', 4, 'Yoga and balance · Left/right · 2 classes', 13),
@@ -41,7 +49,10 @@ INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-p5-phiraki', 'pole', 'Phiraki', 5, 'Combination · Both sides · 8 classes', 4),
 ('cmp-p5-3-swing-free-hand-landing', 'pole', '3 Swing Free Hand Landing', 5, 'Dismount · 4 classes', 5),
 ('cmp-p5-tedhi-same-hand-and-same-leg', 'pole', 'Tedhi (Same hand and same leg)', 5, 'Mount · Both sides · 8 classes', 6),
-('cmp-p5-thakbandar-while-on-the-ground', 'pole', 'Thakbandar while on the ground', 5, 'Yoga and balance · Both sides · 2 classes', 7),
+('cmp-p5-thakbandar-while-on-the-ground', 'pole', 'Thakbandar while on the ground', 5, 'Yoga and balance · Both sides · 2 classes', 7)
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-p5-thakbandar-landing', 'pole', 'Thakbandar landing', 5, 'Dismount · 2 classes', 8),
 ('cmp-p5-tree-pose', 'pole', 'Tree Pose', 5, 'Yoga and balance · Both sides · 12 classes', 9),
 ('cmp-p5-patangi-with-arched-back', 'pole', 'Patangi with arched back', 5, 'Yoga and balance · Left/right · 8 classes', 10),
@@ -51,7 +62,10 @@ INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-p5-baithizaap', 'pole', 'Baithizaap', 5, 'Drop/intercept · 12 classes', 14),
 ('cmp-p5-bajrang-pakkad', 'pole', 'Bajrang Pakkad', 5, 'Yoga and balance · Left/right · 4 classes', 15),
 ('cmp-p5-abdominal-plank-with-hands', 'pole', 'Abdominal Plank with hands', 5, 'Yoga and balance · 8 classes', 16),
-('cmp-p5-1ukasan-pathicha-tajwa-with-both-hands-on-pole', 'pole', '1ukasan, Pathicha Tajwa with both hands on pole', 5, 'Yoga and balance · 12 classes', 17),
+('cmp-p5-1ukasan-pathicha-tajwa-with-both-hands-on-pole', 'pole', '1ukasan, Pathicha Tajwa with both hands on pole', 5, 'Yoga and balance · 12 classes', 17)
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-p5-ghoda-balance', 'pole', 'Ghoda Balance', 5, 'Yoga and balance · Left/right · 20 classes', 18),
 ('cmp-p5-half-balance-tuck-hold', 'pole', 'Half balance Tuck hold', 5, 'Yoga and balance · Left/right · 12 classes', 19),
 ('cmp-r1-climb-up-and-down', 'rope', 'Climb up and down', 1, 'Mount · 4 classes', 1),
@@ -61,7 +75,10 @@ INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-r2-jump-and-tuck-hold-catch', 'rope', 'Jump and Tuck hold catch', 2, 'Mount · 2 classes', 1),
 ('cmp-r2-one-leg-cross', 'rope', 'One leg cross', 2, 'Yoga and balance · Both sides · 2 classes', 2),
 ('cmp-r2-two-leg-cross', 'rope', 'Two Leg cross', 2, 'Yoga and balance · Left/right · 2 classes', 3),
-('cmp-r2-patangi', 'rope', 'Patangi', 2, 'Yoga and balance · Both sides · 2 classes', 4),
+('cmp-r2-patangi', 'rope', 'Patangi', 2, 'Yoga and balance · Both sides · 2 classes', 4)
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-r2-gaurai-with-toes', 'rope', 'Gaurai with toes', 2, 'Yoga and balance · Both sides · 2 classes', 5),
 ('cmp-r2-nidrasan', 'rope', 'Nidrasan', 2, 'Yoga and balance · Both sides · 1 class', 6),
 ('cmp-r2-cross-to-adhi', 'rope', 'Cross to Adhi', 2, 'Combination · Both sides · 6 classes', 7),
@@ -71,7 +88,10 @@ INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-r3-shayanasan', 'rope', 'Shayanasan', 3, 'Yoga and balance · Left/right · 6 classes', 3),
 ('cmp-r3-gurupakkad', 'rope', 'Gurupakkad', 3, 'Yoga and balance · Both sides · 3 classes', 4),
 ('cmp-r3-gaurai-without-toes', 'rope', 'Gaurai without toes', 3, 'Yoga and balance · Both sides · 3 classes', 5),
-('cmp-r3-padmasan-without-toes', 'rope', 'Padmasan without toes', 3, 'Yoga and balance · Both sides · 3 classes', 6),
+('cmp-r3-padmasan-without-toes', 'rope', 'Padmasan without toes', 3, 'Yoga and balance · Both sides · 3 classes', 6)
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-r3-vadi', 'rope', 'Vadi', 3, 'Yoga and balance · Both sides · 3 classes', 7),
 ('cmp-r3-two-leg-rikeb', 'rope', 'Two Leg Rikeb', 3, 'Yoga and balance · Both sides · 4 classes', 8),
 ('cmp-r3-angasafa-dismount', 'rope', 'Angasafa Dismount', 3, 'Dismount · 4 weeks', 9),
@@ -81,7 +101,10 @@ INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-r4-shayanasan-to-vadi', 'rope', 'Shayanasan to vadi', 4, 'Combination · Left/right · 8 classes', 3),
 ('cmp-r4-shayanasan-to-adhi', 'rope', 'Shayanasan to adhi', 4, 'Combination · Left/right · 8 classes', 4),
 ('cmp-r4-one-leg-rikeb', 'rope', 'One Leg Rikeb', 4, 'Yoga and balance · Both sides · 4 classes', 5),
-('cmp-r4-nidrasan-to-vadi', 'rope', 'Nidrasan to vadi', 4, 'Drop/intercept · Left/right · 3 classes', 6),
+('cmp-r4-nidrasan-to-vadi', 'rope', 'Nidrasan to vadi', 4, 'Drop/intercept · Left/right · 3 classes', 6)
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-r4-adhi-to-patangi', 'rope', 'Adhi to Patangi', 4, 'Combination · Left/right · 4 classes', 7),
 ('cmp-r4-adhi-to-padmasan', 'rope', 'Adhi to Padmasan', 4, 'Combination · Left/right · 3 classes', 8),
 ('cmp-r4-shavasan', 'rope', 'Shavasan', 4, 'Combination · Left/right · 4 classes', 9),
@@ -91,7 +114,10 @@ INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-r5-jump-180-twist-stradle-hold-catch', 'rope', 'Jump 180 twist stradle hold catch', 5, 'Mount · Both sides · 4 classes', 2),
 ('cmp-r5-cross-to-2-leg-rikeb', 'rope', 'Cross to 2 leg rikeb', 5, 'Drop/intercept · Left/right · 12 classes', 3),
 ('cmp-r5-upper-cross', 'rope', 'Upper Cross', 5, 'Yoga and balance · Left/right · 2 classes', 4),
-('cmp-r5-shayanasan-to-nidrasan', 'rope', 'Shayanasan to nidrasan', 5, 'Combination · Left/right · 4 classes', 5),
+('cmp-r5-shayanasan-to-nidrasan', 'rope', 'Shayanasan to nidrasan', 5, 'Combination · Left/right · 4 classes', 5)
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-r5-vadi-to-rikeb', 'rope', 'Vadi to rikeb', 5, 'Drop/intercept · Both sides · 4 classes', 6),
 ('cmp-r5-one-leg-rikeb', 'rope', 'One Leg Rikeb', 5, 'Yoga and balance · Both sides · 3 classes', 7),
 ('cmp-r5-one-leg-rikeb-natrajasan-y-lever-leg-behind-neck', 'rope', 'One Leg Rikeb: Natrajasan, y-lever, leg behind neck', 5, 'Yoga and balance · Both sides · 3 classes', 8),
@@ -101,7 +127,10 @@ INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-r5-adhi-to-patangi', 'rope', 'Adhi to Patangi', 5, 'Combination · Left/right · 4 classes', 12),
 ('cmp-r5-padmasan-to-adhi', 'rope', 'Padmasan to Adhi', 5, 'Combination · Left/right · 4 classes', 13),
 ('cmp-r5-dhanurasan', 'rope', 'Dhanurasan', 5, 'Combination · Left/right · 6 classes', 14),
-('cmp-r5-back-plank', 'rope', 'Back Plank', 5, 'Yoga and balance · 8 classes', 15),
+('cmp-r5-back-plank', 'rope', 'Back Plank', 5, 'Yoga and balance · 8 classes', 15)
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-r5-patangi-kalat', 'rope', 'Patangi Kalat', 5, 'Dismount · 12 classes', 16),
 ('cmp-r5-mayurpankhi', 'rope', 'Mayurpankhi', 5, 'Dismount · 2 classes', 17),
 ('cmp-y1-dronasana', 'yoga', 'Dronasana', 1, 'Forward bend', 1),
@@ -111,7 +140,10 @@ INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-y1-side-split-left-bend-listed-again-in-source', 'yoga', 'Side Split - Left Bend (listed again in source)', 1, 'Side bend', 5),
 ('cmp-y1-gomukhasana', 'yoga', 'Gomukhasana', 1, 'Shoulder flexibility', 6),
 ('cmp-y1-sit-on-the-ground-and-move-hands-in-180-degrees', 'yoga', 'Sit on the ground and move hands in 180 degrees', 1, 'Shoulder flexibility', 7),
-('cmp-y1-side-split', 'yoga', 'Side Split', 1, 'Hip mobility', 8),
+('cmp-y1-side-split', 'yoga', 'Side Split', 1, 'Hip mobility', 8)
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-y1-forward-split-left-leg-forward', 'yoga', 'Forward Split - Left leg forward', 1, 'Hip mobility', 9),
 ('cmp-y1-forward-split-right-leg-forward', 'yoga', 'Forward Split - Right leg forward', 1, 'Hip mobility', 10),
 ('cmp-y1-tree-pose', 'yoga', 'Tree Pose', 1, 'Stand up', 11),
@@ -121,7 +153,10 @@ INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-y1-halasana', 'yoga', 'Halasana', 1, 'Core', 15),
 ('cmp-y2-paschimotanasan', 'yoga', 'Paschimotanasan', 2, 'Forward bend', 1),
 ('cmp-y2-akarna-dhanurasana', 'yoga', 'Akarna Dhanurasana', 2, 'Forward bend', 2),
-('cmp-y2-camel-back', 'yoga', 'Camel Back', 2, 'Backward bend', 3),
+('cmp-y2-camel-back', 'yoga', 'Camel Back', 2, 'Backward bend', 3)
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-y2-dhanurasana', 'yoga', 'Dhanurasana', 2, 'Backward bend', 4),
 ('cmp-y2-trikonasan', 'yoga', 'Trikonasan', 2, 'Side bend', 5),
 ('cmp-y2-ardha-machindrasana', 'yoga', 'Ardha Machindrasana', 2, 'Shoulder flexibility', 6),
@@ -131,7 +166,10 @@ INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-y2-veerbhadrasana', 'yoga', 'Veerbhadrasana', 2, 'Stand up', 10),
 ('cmp-y2-mayurasana', 'yoga', 'Mayurasana', 2, 'Core', 11),
 ('cmp-y3-raj-kapotanasan', 'yoga', 'Raj Kapotanasan', 3, 'Backward bend', 1),
-('cmp-y3-bridge', 'yoga', 'Bridge', 3, 'Backward bend', 2),
+('cmp-y3-bridge', 'yoga', 'Bridge', 3, 'Backward bend', 2)
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-y3-ek-padshirasana', 'yoga', 'Ek Padshirasana', 3, 'Hip mobility', 3),
 ('cmp-y3-padmasana-lift', 'yoga', 'Padmasana Lift', 3, 'Hip mobility', 4),
 ('cmp-y3-baddha-padmasana', 'yoga', 'Baddha Padmasana', 3, 'Hip mobility', 5),
@@ -141,7 +179,10 @@ INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-y3-straddle-bakasana', 'yoga', 'Straddle Bakasana', 3, 'Core', 9),
 ('cmp-y3-ek-hati-mayurasana', 'yoga', 'Ek Hati Mayurasana', 3, 'Core', 10),
 ('cmp-y4-vruschikasana', 'yoga', 'Vruschikasana', 4, 'Backward bend', 1),
-('cmp-y4-bridge-with-one-leg-up', 'yoga', 'Bridge with one leg up', 4, 'Backward bend', 2),
+('cmp-y4-bridge-with-one-leg-up', 'yoga', 'Bridge with one leg up', 4, 'Backward bend', 2)
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO skills (id, apparatus, name, level, description, sort_order) VALUES
 ('cmp-y4-chakorasana', 'yoga', 'Chakorasana', 4, 'Hip mobility', 3),
 ('cmp-y4-one-hand-straddle', 'yoga', 'One Hand Straddle', 4, 'Core', 4),
 ('cmp-y4-side-bakasana', 'yoga', 'Side Bakasana', 4, 'Core', 5),
