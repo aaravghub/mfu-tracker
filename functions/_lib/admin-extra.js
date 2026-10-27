@@ -136,7 +136,7 @@ export async function handleAdminExtra(path, method, request, env, url) {
   if (root === 'email') {
     if (id === 'status' && method === 'GET') {
       const log = (await env.DB.prepare('SELECT * FROM email_log ORDER BY created_at DESC LIMIT 15').all()).results;
-      return json({ configured: mailConfigured(env), from: mailConfigured(env) ? env.MAIL_FROM : null, log });
+      return json({ configured: mailConfigured(env), from: mailConfigured(env) ? 'automallakhamb@gmail.com' : null, log });
     }
     if (id === 'send' && method === 'POST') {
       if (!body) return json({ error: 'Expected JSON.' }, 400);
@@ -154,7 +154,7 @@ export async function handleAdminExtra(path, method, request, env, url) {
         const recips = await recipientsFor(env, body.audience);
         return json({ ok: true, recipients: recips.length, html: build('Parent').html });
       }
-      if (!mailConfigured(env)) return json({ error: 'Email is not set up yet. Add RESEND_API_KEY and MAIL_FROM in Cloudflare Pages settings (see README).' }, 400);
+      if (!mailConfigured(env)) return json({ error: 'Gmail is not set up yet. Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN in Cloudflare Pages settings.' }, 400);
 
       const isTest = !!body.test_to;
       let recips;

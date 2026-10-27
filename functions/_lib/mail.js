@@ -1,30 +1,79 @@
 import { esc, isHttpUrl } from './util.js';
 
-// Email is sent through Resend's HTTP API (no SDK). Needs secrets RESEND_API_KEY and MAIL_FROM.
-export const mailConfigured = env => !!(env.RESEND_API_KEY && env.MAIL_FROM);
+// Gmail API sender. Secrets required: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GMAIL_REFRESH_TOKEN.
+// The authenticated Gmail account is automallakhamb@gmail.com.
+export const mailConfigured = env => !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GMAIL_REFRESH_TOKEN);
+
+async function gmailAccessToken(env) {
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      refresh_token: env.GMAIL_REFRESH_TOKEN,
+      grant_type: 'refresh_token'
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.access_token) throw new Error(data.error_description || data.error || 'Could not refresh Gmail access.');
+  return data.access_token;
+}
+
+const base64url = bytes => {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, '');
+};
+const enc = s => base64url(new TextEncoder().encode(s));
+const headerSafe = s => String(s || '').replace(/[\\r\\n]/g, ' ').replace(/[^\\x20-\\x7E]/g, '?');
 
 export async function sendMessages(env, messages) {
   let sent = 0, failed = 0, error = '';
-  for (let i = 0; i < messages.length; i += 100) {
-    const chunk = messages.slice(i, i + 100);
-    if (i > 0) await new Promise(r => setTimeout(r, 600)); // stay under provider rate limits
+  if (!mailConfigured(env)) return { sent: 0, failed: messages.length, error: 'Gmail is not configured. Add the Google OAuth secrets in Cloudflare Pages.' };
+  let token;
+  try { token = await gmailAccessToken(env); }
+  catch (e) { return { sent: 0, failed: messages.length, error: String(e.message || 'Gmail authorization failed.') }; }
+  for (const m of messages) {
     try {
-      const res = await fetch('https://api.resend.com/emails/batch', {
+      const boundary = 'mfu_' + crypto.randomUUID().replace(/-/g, '');
+      const mime = [
+        'From: MFU <automallakhamb@gmail.com>',
+        'To: ' + m.to,
+        'Subject: ' + headerSafe(m.subject),
+        'MIME-Version: 1.0',
+        'Content-Type: multipart/alternative; boundary="' + boundary + '"',
+        '',
+        '--' + boundary,
+        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: base64',
+        '',
+        enc(m.text || ''),
+        '--' + boundary,
+        'Content-Type: text/html; charset=UTF-8',
+        'Content-Transfer-Encoding: base64',
+        '',
+        enc(m.html || ''),
+        '--' + boundary + '--',
+        ''
+      ].join('\\r\\n');
+      const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + env.RESEND_API_KEY, 'content-type': 'application/json' },
-        body: JSON.stringify(chunk.map(m => ({
-          from: env.MAIL_FROM, to: [m.to], subject: m.subject, html: m.html, text: m.text,
-          ...(env.MAIL_REPLY_TO ? { reply_to: env.MAIL_REPLY_TO } : {})
-        })))
+        headers: { Authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+        body: JSON.stringify({ raw: enc(mime) })
       });
-      if (res.ok) sent += chunk.length;
-      else { failed += chunk.length; if (!error) error = ((await res.json().catch(() => ({}))).message) || ('Email provider returned ' + res.status); }
-    } catch (e) { failed += chunk.length; if (!error) error = 'Could not reach the email provider.'; }
+      if (res.ok) sent++;
+      else {
+        const data = await res.json().catch(() => ({}));
+        failed++;
+        if (!error) error = data.error?.message || 'Gmail API returned HTTP ' + res.status;
+      }
+    } catch (e) { failed++; if (!error) error = String(e.message || 'Could not send through Gmail.'); }
   }
   return { sent, failed, error };
 }
 
-export const siteUrl = (env, request) => (env.SITE_URL || new URL(request.url).origin).replace(/\/+$/, '');
+export const siteUrl = (env, request) => (env.SITE_URL || new URL(request.url).origin).replace(/\\/+$/, '');
 
 const fmtDate = d => {
   const t = new Date(String(d) + 'T00:00:00Z');

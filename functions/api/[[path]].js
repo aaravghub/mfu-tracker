@@ -9,6 +9,42 @@ export async function onRequest({request,env,params}){
  if(!env.DB)return json({error:'Cloudflare D1 binding DB is missing. Configure it in Pages settings.'},500);
  const raw=params.path||'';const path=(Array.isArray(raw)?raw.join('/'):String(raw)).replace(/^\/+|\/+$/g,'');const method=request.method;const url=new URL(request.url);
  await ensureSchema(env);
+
+ // Google OAuth setup: start requires an admin session; callback is protected by one-time state.
+ if(path==='auth/google/start'&&method==='GET'){
+  const s=await session(request,env);
+  if(!s||s.role!=='admin')return json({error:'Sign in as an administrator first.'},401);
+  if(!env.GOOGLE_CLIENT_ID||!env.GOOGLE_CLIENT_SECRET)return json({error:'Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET as Cloudflare secrets first.'},500);
+  const state=crypto.randomUUID()+crypto.randomUUID();
+  await env.DB.prepare('DELETE FROM google_oauth_states WHERE expires_at<?').bind(Math.floor(Date.now()/1000)).run();
+  await env.DB.prepare('INSERT INTO google_oauth_states(state_hash,expires_at) VALUES(?,?)').bind(await sha256(state),Math.floor(Date.now()/1000)+600).run();
+  const redirectUri='https://mfu-tracker.pages.dev/api/auth/google/callback';
+  const auth=new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  auth.searchParams.set('client_id',env.GOOGLE_CLIENT_ID);
+  auth.searchParams.set('redirect_uri',redirectUri);
+  auth.searchParams.set('response_type','code');
+  auth.searchParams.set('scope','https://www.googleapis.com/auth/gmail.send');
+  auth.searchParams.set('access_type','offline');
+  auth.searchParams.set('prompt','consent');
+  auth.searchParams.set('state',state);
+  return Response.redirect(auth.toString(),302);
+ }
+ if(path==='auth/google/callback'&&method==='GET'){
+  const code=url.searchParams.get('code'),state=url.searchParams.get('state'),oauthError=url.searchParams.get('error');
+  const page=(title,body,status=200)=>new Response('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>'+title+'</title></head><body style="font:16px system-ui;max-width:760px;margin:40px auto;padding:0 18px;line-height:1.5"><h1>'+title+'</h1>'+body+'</body></html>',{status,headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store, max-age=0','referrer-policy':'no-referrer','x-content-type-options':'nosniff'}});
+  if(oauthError)return page('Google authorization cancelled','<p>Google did not authorize MFU Tracker. You can close this tab and try again.</p>',400);
+  if(!code||!state||!env.GOOGLE_CLIENT_ID||!env.GOOGLE_CLIENT_SECRET)return page('Authorization failed','<p>Missing OAuth parameters or Cloudflare credentials. Please restart the setup from the admin account.</p>',400);
+  const stateHash=await sha256(state);
+  const row=await env.DB.prepare('SELECT expires_at FROM google_oauth_states WHERE state_hash=?').bind(stateHash).first();
+  if(!row||row.expires_at<Math.floor(Date.now()/1000))return page('Authorization expired','<p>This setup link is invalid or expired. Sign in as admin and start the connection again.</p>',400);
+  await env.DB.prepare('DELETE FROM google_oauth_states WHERE state_hash=?').bind(stateHash).run();
+  const redirectUri='https://mfu-tracker.pages.dev/api/auth/google/callback';
+  const tokenRes=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({code,client_id:env.GOOGLE_CLIENT_ID,client_secret:env.GOOGLE_CLIENT_SECRET,redirect_uri:redirectUri,grant_type:'authorization_code'})});
+  const tokenData=await tokenRes.json().catch(()=>({}));
+  if(!tokenRes.ok||!tokenData.refresh_token)return page('Could not get a refresh token','<p>Google did not return a refresh token. In Google Auth Platform, check the test user and Gmail API setup, then restart authorization. Do not share tokens in chat.</p>',502);
+  const safeToken=String(tokenData.refresh_token).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return page('Gmail authorization complete','<p>Copy the refresh token below now. It is shown only on this page and is not saved in the database. Add it to Cloudflare Pages as the secret <code>GMAIL_REFRESH_TOKEN</code>, then redeploy.</p><textarea id="token" readonly style="width:100%;min-height:100px;box-sizing:border-box">'+safeToken+'</textarea><p><button onclick="navigator.clipboard.writeText(document.getElementById(\'token\').value)">Copy refresh token</button></p><p><strong>Keep this token private.</strong> Do not put it in GitHub or share it with anyone.</p>');
+ }
  if(path==='login'&&method==='POST'){if(!env.ADMIN_PASSWORD)return json({error:'ADMIN_PASSWORD secret is not configured.'},500);const key='admin:'+clientKey(request);if(await isBlocked(env,key))return json({error:'Too many attempts. Please wait 15 minutes and try again.'},429);const body=await request.json().catch(()=>({}));if(typeof body.password!=='string'||!(await secretsMatch(body.password,env.ADMIN_PASSWORD))){await recordFail(env,key);return json({error:'Incorrect password.'},401)}await clearFails(env,key);return json({ok:true,role:'admin'},200,{'set-cookie':await startSession(env,'admin',43200)})}
  if(path==='logout'&&method==='POST'){await endSession(request,env);return json({ok:true},200,{'set-cookie':'mfu_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0'})}
  if(path==='me'&&method==='GET'){const s=await session(request,env);if(!s)return json({authenticated:false});if(s.role==='parent'){const p=s.parent_id?await env.DB.prepare('SELECT name,email FROM parents WHERE id=? AND COALESCE(active,1)=1').bind(s.parent_id).first():null;return p?json({authenticated:true,role:'parent',name:p.name,email:p.email}):json({authenticated:false})}return json({authenticated:true,role:s.role})}

@@ -2,6 +2,7 @@
 let ready = null;
 
 const STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS google_oauth_states (state_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS student_skill_progress (id TEXT PRIMARY KEY, student_id TEXT REFERENCES students(id) ON DELETE CASCADE, skill_id TEXT REFERENCES skills(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN ('not_started','learning','mastered')), UNIQUE(student_id,skill_id))`,
   `CREATE TABLE IF NOT EXISTS links (id TEXT PRIMARY KEY, title TEXT NOT NULL, url TEXT NOT NULL, category TEXT DEFAULT 'Forms', description TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS shop_items (id TEXT PRIMARY KEY, title TEXT NOT NULL, url TEXT NOT NULL, category TEXT DEFAULT 'Gear', price TEXT DEFAULT '', description TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
