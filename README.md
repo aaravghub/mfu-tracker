@@ -2,6 +2,26 @@
 
 Mallakhamb Federation USA management system starter, designed for Cloudflare Pages + Pages Functions + D1. The interface is responsive and uses the MFU orange, blue, and white palette.
 
+## What's new
+- **Parent portal**: parents sign in with their email and see only their own children — levels, skill progress, attendance, routines, upcoming evaluations/competitions (with sign-up links), forms & links, and the shop list.
+- **Parents page (admin)**: create accounts from the parent emails already on student records in one click, link/unlink children, send invites or password-reset links.
+- **Competitions & evaluations**: time, location, details and a sign-up link per event; one-click "Email parents".
+- **Links & forms** and **Shop**: admin-managed lists parents see in their portal (liability form, registration, gear to buy, etc.).
+- **Email parents**: send a message plus any events, links and shop items to everyone, one center, or specific students. Preview, test send and a send history are built in.
+- **Skill progress**: mark each student's skills not started / learning / mastered from the Students page.
+- Mobile-friendly menu, nicer cards, and dark mode throughout.
+
+Database changes apply automatically on the first request after deploy — nothing to run by hand.
+
+## Email setup (one time)
+Email uses [Resend](https://resend.com) over plain HTTPS (no packages). In Cloudflare Pages → Settings → Variables and Secrets add:
+- `RESEND_API_KEY` (secret) — from your Resend account
+- `MAIL_FROM` — e.g. `MFU <notifications@yourdomain.org>` (the domain must be verified in Resend)
+- optional `MAIL_REPLY_TO` — where parent replies go
+- optional `SITE_URL` — e.g. `https://mfu-tracker.pages.dev`, used for links in emails
+
+Until these are set, the Email page still lets you build and preview messages, and parent invites give you links to share manually.
+
 ## Included modules
 - Four centers: Edison, Princeton, Virginia, Connecticut
 - Students and coaches
@@ -20,4 +40,4 @@ Mallakhamb Federation USA management system starter, designed for Cloudflare Pag
 5. Deploy.
 
 ## Important
-This is an initial scaffold, not yet a production-ready system. The admin password is shared, and the parent portal, protected photo uploads, detailed attendance workflows, and curriculum import still require implementation and testing. Do not enter real children's data until security and privacy testing is complete.
+The admin password is still shared. Parent accounts use individual passwords (PBKDF2-hashed), login attempts are rate-limited, and parents can only read data for children linked to their account. Photos are still plain links, and the app has not had an independent security review — review it before storing real children's data.
