@@ -73,7 +73,15 @@ export async function sendMessages(env, messages) {
   return { sent, failed, error };
 }
 
-export const siteUrl = (env, request) => (env.SITE_URL || new URL(request.url).origin).replace(/\/+$/, '');
+export const siteUrl = (env, request) => {
+  const fallback = new URL(request.url).origin;
+  let raw = String(env.SITE_URL || fallback).trim();
+  const markdown = /^\[[^\]]+\]\((https?:\/\/[^)]+)\)$/.exec(raw);
+  if (markdown) raw = markdown[1];
+  raw = raw.replace(/^<|>$/g, '');
+  try { const parsed = new URL(raw); if (parsed.protocol === 'https:' || parsed.protocol === 'http:') return parsed.origin; } catch {}
+  return fallback;
+};
 
 const fmtDate = d => {
   const t = new Date(String(d) + 'T00:00:00Z');
