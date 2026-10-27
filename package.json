@@ -1,0 +1,7 @@
+{
+  "name": "mfu-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": { "dev": "wrangler pages dev public", "deploy": "wrangler pages deploy public", "db:init": "wrangler d1 execute mfu-tracker-db --file=schema.sql" },
+  "devDependencies": { "wrangler": "^4.20.0" }
+}
