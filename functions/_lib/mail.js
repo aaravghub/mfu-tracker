@@ -23,10 +23,10 @@ async function gmailAccessToken(env) {
 const base64url = bytes => {
   let binary = '';
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, '');
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 };
 const enc = s => base64url(new TextEncoder().encode(s));
-const headerSafe = s => String(s || '').replace(/[\\r\\n]/g, ' ').replace(/[^\\x20-\\x7E]/g, '?');
+const headerSafe = s => String(s || '').replace(/[\r\n]/g, ' ').replace(/[^\x20-\x7E]/g, '?');
 
 export async function sendMessages(env, messages) {
   let sent = 0, failed = 0, error = '';
