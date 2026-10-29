@@ -72,7 +72,7 @@ api = async function (p, o) {
 /* ---------- sign in / set password ---------- */
 function authCard(inner) {
   $('#title').textContent = 'Welcome';
-  $('#content').innerHTML = `<div class="login card"><img class="login-logo" src="/mfu-logo.png" alt="Mallakhamb Federation USA logo">${inner}</div>`;
+  $('#content').innerHTML = window.mfuStage ? mfuStage(inner) : `<div class="login card"><img class="login-logo" src="/mfu-logo.png" alt="Mallakhamb Federation USA logo">${inner}</div>`;
 }
 function loginView(mode = 'parent') {
   clearRole();
