@@ -45,32 +45,3 @@ body,.sidebar,header,.card,.stat,.timer-card,.table-wrap,input,select,textarea,n
 nav button:hover{transform:translateX(2px)}
 @keyframes rise-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
-
-
-/* MFU cinematic login intro */
-.mfu-cinematic{position:relative;isolation:isolate;overflow:hidden;width:min(100%,980px);height:clamp(210px,34vw,360px);margin:0 auto 18px;border:1px solid #26344b;border-radius:20px;background:radial-gradient(ellipse at 50% 70%,#25334a 0,#121b2b 48%,#0a101c 100%);box-shadow:0 24px 70px #07101d38}
-.cinematic-grid{position:absolute;inset:0;background-image:linear-gradient(#a6b9d012 1px,transparent 1px),linear-gradient(90deg,#a6b9d012 1px,transparent 1px);background-size:32px 32px;mask-image:linear-gradient(transparent,#000 22%,#000 85%,transparent);perspective:400px;transform:rotateX(8deg) scale(1.15)}
-.cinematic-glow{position:absolute;width:45%;height:45%;left:27%;top:35%;background:#f26b2129;filter:blur(38px);border-radius:50%;animation:corePulse 4s ease-in-out infinite}
-.mfu-scene{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
-.floor-ring{fill:none;stroke:#ff9c5740;stroke-width:1.5;transform-origin:450px 300px}.ring-one{animation:ringPulse 4s ease-in-out infinite}.ring-two{animation:ringPulse 4s 0.4s ease-in-out infinite}
-.pole-part{transform-box:fill-box;transform-origin:center;opacity:0}.part-a{animation:polePieceA 6.8s cubic-bezier(.2,.8,.2,1) infinite}.part-b{animation:polePieceB 6.8s cubic-bezier(.2,.8,.2,1) infinite}
-.rope-line{stroke-dasharray:360;stroke-dashoffset:360;animation:ropeDrop 6.8s ease-in-out infinite}
-.pole-athlete,.rope-athlete,.yoga-arrive{opacity:0;transform-box:fill-box;transform-origin:center;animation:athleteReveal 6.8s ease-in-out infinite}
-.pole-athlete{animation-name:poleClimb}.rope-athlete{animation-name:ropeClimb}.yoga-arrive{animation-name:yogaPose}
-.final-aura{opacity:0;transform-origin:450px 176px;animation:auraReveal 6.8s ease-in-out infinite}.sparkles{opacity:0;animation:sparkleReveal 6.8s ease-in-out infinite}
-.cinematic-label{position:absolute;bottom:13px;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:12px;color:#9eafc7;font-size:9px;font-weight:800;letter-spacing:2px}.cinematic-label span:first-child{color:#ff9b54;font-size:11px}.cinematic-label i{height:12px;width:1px;background:#52617a}
-.login.card{position:relative;z-index:1;width:min(100% - 32px,460px);margin:-4px auto 32px;padding:28px;background:color-mix(in srgb,var(--white) 94%,transparent);backdrop-filter:blur(18px);box-shadow:0 22px 65px #111b2d20}
-#content:has(.mfu-cinematic){padding:20px 12px 30px;max-width:none;min-height:calc(100vh - 94px);background:radial-gradient(ellipse at 50% 0%,#f26b2110,transparent 55%)}
-#content:has(.mfu-cinematic) .login-logo{display:none}
-@keyframes polePieceA{0%,5%{opacity:0;transform:translateY(115px) scaleY(.65)}15%,85%,100%{opacity:1;transform:translateY(0) scaleY(1)}}
-@keyframes polePieceB{0%,9%{opacity:0;transform:translateY(-100px) scaleY(.6)}18%,85%,100%{opacity:1;transform:translateY(0) scaleY(1)}}
-@keyframes ropeDrop{0%,14%{stroke-dashoffset:360;opacity:0}25%,85%,100%{stroke-dashoffset:0;opacity:1}}
-@keyframes poleClimb{0%,20%{opacity:0;transform:translate(-24px,36px) scale(.7)}30%,86%,100%{opacity:1;transform:translate(0,0) scale(1)}}
-@keyframes ropeClimb{0%,30%{opacity:0;transform:translate(24px,-20px) scale(.7)}42%,86%,100%{opacity:1;transform:translate(0,0) scale(1)}}
-@keyframes yogaPose{0%,38%{opacity:0;transform:translateY(25px) scale(.7)}50%,86%,100%{opacity:1;transform:translateY(0) scale(1)}}
-@keyframes auraReveal{0%,48%{opacity:0;transform:scale(.65) rotate(-25deg)}58%,85%,100%{opacity:1;transform:scale(1) rotate(0)}}
-@keyframes sparkleReveal{0%,55%{opacity:0}65%,85%,100%{opacity:1}}
-@keyframes corePulse{0%,100%{opacity:.45;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
-@keyframes ringPulse{0%,100%{opacity:.45;transform:scale(.96)}50%{opacity:1;transform:scale(1.04)}}
-@media(max-width:700px){.mfu-cinematic{height:230px;margin-bottom:16px}.cinematic-label{font-size:7px;letter-spacing:1px}.login.card{margin-top:0;padding:22px}#content:has(.mfu-cinematic){padding:12px 0 24px}}
-@media(prefers-reduced-motion:reduce){.mfu-cinematic *{animation:none!important}.pole-part,.pole-athlete,.rope-athlete,.yoga-arrive,.final-aura,.sparkles{opacity:1!important}.rope-line{stroke-dashoffset:0!important}}
