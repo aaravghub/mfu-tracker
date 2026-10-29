@@ -161,7 +161,7 @@ PAGES.overview = async () => {
 PAGES.students = async () => {
   const [students, centers, parents] = await Promise.all([api('students'), api('centers'), api('parents')]);
   const withAccount = new Set(parents.filter(p => p.active !== 0).flatMap(p => p.students.map(s => s.id)));
-  $('#content').innerHTML = hero('Students', 'Profiles, levels and skill progress.', '<button class="btn" id="add">+ Add student</button>') +
+  $('#content').innerHTML = hero('Students', 'Profiles, levels and skill progress.', '<button class="btn secondary" id="import-students">Import CSV</button><button class="btn" id="add">+ Add student</button>') +
     '<div class="toolbar"><input id="filter" placeholder="Search students or parents..."><select id="cfilter" style="max-width:200px"><option value="">All centers</option>' + centers.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('') + '</select></div><div id="rows"></div>';
   const draw = () => {
     const q = $('#filter').value.toLowerCase(), c = $('#cfilter').value;
@@ -173,6 +173,7 @@ PAGES.students = async () => {
   };
   $('#filter').oninput = draw; $('#cfilter').onchange = draw; draw();
   $('#add').onclick = () => formModal(configs.students, null, 'students');
+  $('#import-students').onclick = () => studentCsvImport();
 };
 
 async function progressModal(student) {
