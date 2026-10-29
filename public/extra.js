@@ -70,9 +70,26 @@ api = async function (p, o) {
 };
 
 /* ---------- sign in / set password ---------- */
-function authCard(inner) {
+function authCard(inner, showIntro = false) {
   $('#title').textContent = 'Welcome';
-  $('#content').innerHTML = `<div class="login card"><img class="login-logo" src="/mfu-logo.png" alt="Mallakhamb Federation USA logo">${inner}</div>`;
+  const intro = showIntro ? `<div class="mfu-cinematic" aria-label="Animated silhouettes assembling a Mallakhamb pole and rope, followed by a yoga pose">
+    <div class="cinematic-grid"></div><div class="cinematic-glow"></div>
+    <svg class="mfu-scene" viewBox="0 0 900 360" role="img" aria-hidden="true">
+      <defs><linearGradient id="poleMetal" x1="0" x2="1"><stop stop-color="#8d9bad"/><stop offset=".45" stop-color="#fff0d6"/><stop offset="1" stop-color="#f26b21"/></linearGradient><linearGradient id="energy" x1="0" x2="1"><stop stop-color="#ff9a54"/><stop offset="1" stop-color="#ffcf75"/></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="5"/></filter></defs>
+      <ellipse class="floor-ring ring-one" cx="450" cy="300" rx="315" ry="24"/><ellipse class="floor-ring ring-two" cx="450" cy="300" rx="220" ry="15"/>
+      <g class="pole-build"><rect class="pole-part part-a" x="268" y="55" width="12" height="222" rx="6" fill="url(#poleMetal)"/><rect class="pole-part part-b" x="268" y="20" width="12" height="222" rx="6" fill="url(#poleMetal)"/><rect x="250" y="275" width="48" height="8" rx="4" fill="#ff9b54"/><path d="M258 285h32l12 9h-56z" fill="#7e8da1"/><circle cx="274" cy="48" r="20" fill="#f26b21" opacity=".14" filter="url(#glow)"/></g>
+      <g class="rope-build"><path class="rope-line" d="M620 25 C603 42 637 50 620 68 S603 93 620 111 S637 137 620 155 S603 180 620 198 S637 224 620 242" fill="none" stroke="#ffb46e" stroke-width="4" stroke-linecap="round"/><path d="M608 24h24l-4 9h-16z" fill="#d5deea"/><circle cx="620" cy="244" r="6" fill="#ffb46e"/></g>
+      <g class="yoga-arrive" fill="#ffb46e" stroke="#ffb46e" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="444" cy="175" r="10" stroke="none"/><path d="M444 190L444 226 M444 201L414 181L394 156 M444 201L475 181L493 154 M444 226L421 263L398 281 M444 226L468 263L495 280" fill="none"/>
+      </g>
+      <g class="pole-athlete" fill="#111a2b" stroke="#111a2b" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"><circle cx="273" cy="92" r="10" stroke="none"/><path d="M273 106L280 145L270 180 M277 123L250 106L274 75 M280 145L303 171L321 176" fill="none"/><path d="M257 182h27l-7 7h-14z" stroke="none"/></g>
+      <g class="rope-athlete" fill="#111a2b" stroke="#111a2b" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"><circle cx="618" cy="112" r="9" stroke="none"/><path d="M618 125L615 159L635 181 M616 140L590 153L620 173 M615 159L594 187 M635 181L654 194" fill="none"/></g>
+      <g class="final-aura"><circle cx="450" cy="176" r="82" fill="none" stroke="#f26b21" stroke-width="1.5" stroke-dasharray="5 10"/><circle cx="450" cy="176" r="105" fill="none" stroke="#ffbd7d" stroke-width="1" stroke-dasharray="2 12"/></g>
+      <g class="sparkles" fill="#ffe0b9"><circle cx="185" cy="95" r="3"/><circle cx="720" cy="70" r="3"/><circle cx="700" cy="235" r="2"/><circle cx="360" cy="55" r="2"/><circle cx="535" cy="70" r="3"/><circle cx="185" cy="240" r="2"/><path d="M450 45v16m-8-8h16M745 145v12m-6-6h12M170 165v12m-6-6h12"/></g>
+    </svg>
+    <div class="cinematic-label"><span>MFU</span><i></i><span>STRENGTH · BALANCE · DISCIPLINE</span></div>
+  </div>` : '';
+  $('#content').innerHTML = `${intro}<div class="login card"><img class="login-logo" src="/mfu-logo.png" alt="Mallakhamb Federation USA logo">${inner}</div>`;
 }
 function loginView(mode = 'parent') {
   clearRole();
@@ -82,7 +99,7 @@ function loginView(mode = 'parent') {
     ? `<p>Sign in to follow your child's progress, see upcoming events and find forms.</p>
        <form id="login"><label>Email<input type="email" id="email" autocomplete="username" required></label><label>Password<input type="password" id="password" autocomplete="current-password" required></label><button class="primary">Sign in</button><p id="login-error" class="error" role="alert"></p><p class="center"><a href="#" id="forgot">Forgot password or first time here?</a></p></form>`
     : `<p>Sign in to manage centers, students, classes, skills and families.</p>
-       <form id="login"><label>Admin password<input type="password" id="password" autocomplete="current-password" required></label><button class="primary">Sign in</button><p id="login-error" class="error" role="alert"></p></form>`}`);
+       <form id="login"><label>Admin password<input type="password" id="password" autocomplete="current-password" required></label><button class="primary">Sign in</button><p id="login-error" class="error" role="alert"></p></form>`}`, true);
   $$('.seg button').forEach(b => b.onclick = () => loginView(b.dataset.mode));
   $('#forgot') && ($('#forgot').onclick = e => { e.preventDefault(); forgotView(); });
   $('#login').onsubmit = async e => {
