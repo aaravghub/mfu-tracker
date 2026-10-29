@@ -21,7 +21,7 @@
     lastTop = top;
   }
   if (nav) {
-    new MutationObserver(() => requestAnimationFrame(place)).observe(nav, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    new MutationObserver(m => { if (blob && m.every(x => x.target === blob)) return; requestAnimationFrame(place); }).observe(nav, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     addEventListener('resize', () => requestAnimationFrame(place));
     $('#menu-toggle')?.addEventListener('click', () => setTimeout(place, 30));
     place();
@@ -41,17 +41,18 @@
   }
   if (typeof show === 'function') {
     const _show = show;
+    // Never blocks rendering: fade the old page out, let the real show() run untouched, then animate the new page in.
     // eslint-disable-next-line no-global-assign
     show = async function (page) {
-      if (reduce || !document.startViewTransition || page === undefined) return _show(page);
-      let ran = null;
-      const run = () => (ran ||= _show(page));
-      try {
-        const vt = document.startViewTransition(run);
-        warp();
-        await vt.updateCallbackDone;
-      } catch { /* transition unsupported/skipped: fall through */ }
-      return run();
+      if (reduce || !content) return _show(page);
+      content.classList.remove('entering'); content.classList.add('leaving'); warp();
+      const guard = setTimeout(() => content.classList.remove('leaving'), 1500);
+      try { await Promise.all([_show(page), new Promise(r => setTimeout(r, 200))]); }
+      finally {
+        clearTimeout(guard);
+        content.classList.remove('leaving'); void content.offsetWidth; content.classList.add('entering');
+        setTimeout(() => content.classList.remove('entering'), 900);
+      }
     };
   }
 

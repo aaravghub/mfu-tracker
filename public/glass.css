@@ -55,7 +55,6 @@
 :root[data-theme] header{position:sticky;top:14px;z-index:15;height:auto;min-height:76px;margin:14px 18px 0 0;padding:16px 26px;border-radius:26px;animation:head-in .9s cubic-bezier(.2,1.1,.3,1) .1s both}
 @keyframes head-in{from{opacity:0;transform:translateY(-30px) scale(.96);filter:blur(12px)}to{opacity:1;transform:none;filter:none}}
 :root[data-theme] #content{padding:26px 26px 40px 0}
-#content{view-transition-name:mfu-content}
 .layout nav{position:relative}
 .layout nav button{position:relative;z-index:1;border-radius:14px;transition:color .25s ease,transform .25s cubic-bezier(.2,1.4,.3,1)}
 :root[data-theme] .layout nav button:hover{background:transparent;transform:translateX(5px)}
@@ -78,12 +77,9 @@
 /* ---------- liquid page transitions ---------- */
 @keyframes rise-in{from{opacity:0;transform:translateY(22px) scale(.97);filter:blur(8px)}to{opacity:1;transform:none;filter:none}}
 .card:nth-child(n+5),.stat:nth-child(n+5){animation-delay:.16s}
-::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
-::view-transition-group(mfu-content){animation-duration:.7s}
-::view-transition-old(mfu-content){animation:vt-out .32s cubic-bezier(.5,0,.8,.4) both}
-::view-transition-new(mfu-content){animation:vt-in .75s cubic-bezier(.2,1,.3,1) both}
-@keyframes vt-out{to{opacity:0;filter:blur(18px) saturate(1.6);transform:translateY(-16px) scale(.96)}}
-@keyframes vt-in{from{opacity:0;filter:blur(24px) saturate(1.6);transform:translateY(30px) scale(1.04)}}
+#content.leaving{opacity:0;filter:blur(16px) saturate(1.5);transform:translateY(-12px) scale(.98);transition:opacity .2s ease,filter .2s ease,transform .2s ease;pointer-events:none}
+#content.entering{animation:vt-in .7s cubic-bezier(.2,1,.3,1) both}
+@keyframes vt-in{from{opacity:0;filter:blur(22px) saturate(1.5);transform:translateY(26px) scale(1.03)}}
 #content.warping{filter:url(#mfu-liquid)}
 
 /* ---------- signed-out: immersive stage ---------- */
