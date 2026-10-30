@@ -23,7 +23,7 @@ function stmtsFor(env, batchId, date, records, remove) {
 // Roster rows (status defaults to present until saved) + drop-ins already saved for that date.
 const ROSTER_SQL = "SELECT bs.batch_id,s.id AS student_id,s.first_name,s.last_name,sa.status,(sa.status IS NOT NULL) AS saved,0 AS drop_in FROM batch_students bs JOIN students s ON s.id=bs.student_id JOIN batches b ON b.id=bs.batch_id LEFT JOIN student_attendance sa ON sa.student_id=s.id AND sa.batch_id=bs.batch_id AND sa.attendance_date=? WHERE COALESCE(s.active,1)=1 AND ";
 const DROPIN_SQL = "SELECT sa.batch_id,s.id AS student_id,s.first_name,s.last_name,sa.status,1 AS saved,1 AS drop_in FROM student_attendance sa JOIN students s ON s.id=sa.student_id JOIN batches b ON b.id=sa.batch_id WHERE sa.attendance_date=? AND NOT EXISTS(SELECT 1 FROM batch_students x WHERE x.batch_id=sa.batch_id AND x.student_id=sa.student_id) AND ";
-const shape = r => ({ student_id: r.student_id, first_name: r.first_name, last_name: r.last_name, status: r.status || 'present', saved: !!r.saved, drop_in: !!r.drop_in });
+const shape = r => ({ student_id: r.student_id, first_name: r.first_name, last_name: r.last_name, status: r.saved ? r.status : '', saved: !!r.saved, drop_in: !!r.drop_in });
 const byName = (a, b) => (a.last_name + a.first_name).localeCompare(b.last_name + b.first_name);
 
 export async function handleAttendance(path, method, request, env, url, body) {
