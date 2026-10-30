@@ -18,7 +18,10 @@ const COLUMNS = [
   ['events', 'signup_url', 'TEXT'],
   ['events', 'event_time', 'TEXT'],
   ['events', 'location', 'TEXT'],
-  ['sessions', 'parent_id', 'TEXT']
+  ['sessions', 'parent_id', 'TEXT'],
+  ['student_attendance', 'drop_in', 'INTEGER DEFAULT 0'],
+  ['student_skill_progress', 'started_date', 'TEXT'],
+  ['student_skill_progress', 'mastered_date', 'TEXT']
 ];
 
 export function ensureSchema(env) {

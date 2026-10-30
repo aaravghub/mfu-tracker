@@ -35,10 +35,10 @@ async function childrenFor(env, parentId) {
   const out = [];
   for (const s of students) {
     const [batches, agg, recent, skills, routines] = await env.DB.batch([
-      env.DB.prepare('SELECT b.name,b.days,b.start_time,b.end_time FROM batch_students bs JOIN batches b ON b.id=bs.batch_id WHERE bs.student_id=? ORDER BY b.name').bind(s.id),
+      env.DB.prepare("SELECT b.name,b.days,b.start_time,b.end_time,0 AS drop_in FROM batch_students bs JOIN batches b ON b.id=bs.batch_id WHERE bs.student_id=? UNION SELECT b.name,b.days,b.start_time,b.end_time,1 FROM student_attendance sa JOIN batches b ON b.id=sa.batch_id WHERE sa.student_id=? AND sa.drop_in=1 AND sa.attendance_date>=date('now','-90 days') AND NOT EXISTS(SELECT 1 FROM batch_students x WHERE x.batch_id=sa.batch_id AND x.student_id=sa.student_id) ORDER BY 1").bind(s.id, s.id),
       env.DB.prepare("SELECT status,COUNT(*) n FROM student_attendance WHERE student_id=? AND attendance_date>=date('now','-90 days') GROUP BY status").bind(s.id),
-      env.DB.prepare('SELECT sa.attendance_date,sa.status,b.name AS batch FROM student_attendance sa LEFT JOIN batches b ON b.id=sa.batch_id WHERE sa.student_id=? ORDER BY sa.attendance_date DESC LIMIT 8').bind(s.id),
-      env.DB.prepare("SELECT sk.id,sk.apparatus,sk.level,sk.name,sk.description,sk.video_url,COALESCE(p.status,'not_started') AS status FROM skills sk LEFT JOIN student_skill_progress p ON p.skill_id=sk.id AND p.student_id=? WHERE COALESCE(sk.active,1)=1 ORDER BY sk.apparatus,sk.level,sk.sort_order,sk.name").bind(s.id),
+      env.DB.prepare('SELECT sa.attendance_date,sa.status,sa.drop_in,b.name AS batch FROM student_attendance sa LEFT JOIN batches b ON b.id=sa.batch_id WHERE sa.student_id=? ORDER BY sa.attendance_date DESC LIMIT 8').bind(s.id),
+      env.DB.prepare("SELECT sk.id,sk.apparatus,sk.level,sk.name,sk.description,sk.video_url,COALESCE(p.status,'not_started') AS status,p.started_date,p.mastered_date FROM skills sk LEFT JOIN student_skill_progress p ON p.skill_id=sk.id AND p.student_id=? WHERE COALESCE(sk.active,1)=1 ORDER BY sk.apparatus,sk.level,sk.sort_order,sk.name").bind(s.id),
       env.DB.prepare('SELECT apparatus,content,photo_url FROM routines WHERE student_id=?').bind(s.id)
     ]);
     const att = { present: 0, late: 0, absent: 0, excused: 0 };

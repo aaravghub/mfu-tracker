@@ -1,5 +1,6 @@
 import { json, cleanEmail, isEmail, isHttpUrl, esc } from './util.js';
 import { createSetupLink, emailSetupLinks } from './parent.js';
+import { handleAttendance } from './attendance.js';
 import { mailConfigured, sendMessages, renderEmail, siteUrl } from './mail.js';
 
 const STATUS = new Set(['not_started', 'learning', 'mastered']);
@@ -43,6 +44,8 @@ async function pick(env, table, ids, cols) {
 export async function handleAdminExtra(path, method, request, env, url) {
   const [root, id, action] = path.split('/');
   const body = (method === 'POST' || method === 'PUT') ? await request.clone().json().catch(() => null) : null;
+
+  { const att = await handleAttendance(path, method, request, env, url, body); if (att) return att; }
 
   // ---- Parent accounts ----
   if (root === 'parents') {
@@ -117,15 +120,22 @@ export async function handleAdminExtra(path, method, request, env, url) {
     if (method === 'GET') {
       const sid = url.searchParams.get('student_id');
       if (!sid) return json({ error: 'student_id is required' }, 400);
-      return json((await env.DB.prepare('SELECT skill_id,status FROM student_skill_progress WHERE student_id=?').bind(sid).all()).results);
+      return json((await env.DB.prepare('SELECT skill_id,status,started_date,mastered_date FROM student_skill_progress WHERE student_id=?').bind(sid).all()).results);
     }
     if (method === 'POST') {
       if (!body || !body.student_id || !Array.isArray(body.changes)) return json({ error: 'student_id and changes are required' }, 400);
       if (body.changes.length > 500) return json({ error: 'Too many changes at once.' }, 400);
-      const stmts = [];
+      const stmts = [], dateOk = d => d == null || d === '' || (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d + 'T00:00:00Z')));
+      const todayUtc = new Date().toISOString().slice(0, 10);
       for (const c of body.changes) {
         if (!c || typeof c.skill_id !== 'string' || !STATUS.has(c.status)) return json({ error: 'Each change needs a skill_id and valid status.' }, 400);
-        stmts.push(env.DB.prepare('INSERT INTO student_skill_progress(id,student_id,skill_id,status) VALUES(?,?,?,?) ON CONFLICT(student_id,skill_id) DO UPDATE SET status=excluded.status').bind(crypto.randomUUID(), body.student_id, c.skill_id, c.status));
+        if (!dateOk(c.started_date) || !dateOk(c.mastered_date)) return json({ error: 'Dates must look like 2026-10-29.' }, 400);
+        // Dates follow the status: nothing for not started, a start date while learning, a start and mastered date once mastered.
+        const started = c.status === 'not_started' ? null : (c.started_date || null);
+        const mastered = c.status === 'mastered' ? (c.mastered_date || todayUtc) : null;
+        const startedFinal = c.status === 'learning' ? (started || todayUtc) : started;
+        if (startedFinal && mastered && mastered < startedFinal) return json({ error: 'The mastered date cannot be before the date they started the skill.' }, 400);
+        stmts.push(env.DB.prepare('INSERT INTO student_skill_progress(id,student_id,skill_id,status,started_date,mastered_date) VALUES(?,?,?,?,?,?) ON CONFLICT(student_id,skill_id) DO UPDATE SET status=excluded.status,started_date=excluded.started_date,mastered_date=excluded.mastered_date').bind(crypto.randomUUID(), body.student_id, c.skill_id, c.status, startedFinal, mastered));
       }
       if (stmts.length) await env.DB.batch(stmts);
       return json({ ok: true, saved: stmts.length });
