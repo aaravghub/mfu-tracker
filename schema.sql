@@ -22,3 +22,7 @@ CREATE TABLE IF NOT EXISTS parent_students (parent_id TEXT NOT NULL REFERENCES p
 CREATE TABLE IF NOT EXISTS password_tokens (token_hash TEXT PRIMARY KEY, parent_id TEXT NOT NULL REFERENCES parents(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS login_attempts (key TEXT PRIMARY KEY, count INTEGER NOT NULL DEFAULT 0, window_start INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS email_log (id TEXT PRIMARY KEY, subject TEXT, audience TEXT, total INTEGER DEFAULT 0, sent INTEGER DEFAULT 0, failed INTEGER DEFAULT 0, is_test INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+-- Attendance drop-ins and skill dates (the API also adds these automatically).
+-- ALTER TABLE student_attendance ADD COLUMN drop_in INTEGER DEFAULT 0;
+-- ALTER TABLE student_skill_progress ADD COLUMN started_date TEXT;
+-- ALTER TABLE student_skill_progress ADD COLUMN mastered_date TEXT;
