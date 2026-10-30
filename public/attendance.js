@@ -70,35 +70,50 @@
     const setMode = m => { S.mode = m; $$('#amodes button').forEach(b => b.classList.toggle('active', b.dataset.m === m)); ({ center: centerView, batch: batchView, report: reportView })[m](); };
     $$('#amodes button').forEach(b => b.onclick = () => setMode(b.dataset.m));
 
-    // shared: date bar + roster + save
+    // Center mode shows batch names first. Each batch has its own roster and submit button.
     function takeView(kind) {
       const isC = kind === 'center';
       const opts = isC ? centers.map(c => `<option value="${esc(c.id)}" ${c.id === S.center ? 'selected' : ''}>${esc(c.name)}</option>`).join('')
         : '<option value="">Choose a batch</option>' + batches.map(b => `<option value="${esc(b.id)}" ${b.id === S.batch ? 'selected' : ''}>${esc(b.name)} · ${esc(centerName(centers, b.center_id))}</option>`).join('');
-      $('#aview').innerHTML = `<div class="card att-bar"><label>${isC ? 'Center' : 'Batch'}<select id="asel">${opts}</select></label><div class="date-step"><button type="button" class="btn secondary small" id="dprev" aria-label="Previous day">‹</button><label>Date<input type="date" id="adate" value="${S.date}"></label><button type="button" class="btn secondary small" id="dnext" aria-label="Next day">›</button><button type="button" class="btn secondary small" id="dtoday">Today</button></div></div><p class="muted att-hint">Everyone starts as present. Change anyone who was absent, late or excused, add drop-ins from other batches, then save. A dot next to a name means it isn’t saved yet.</p><div id="aroster"></div><div class="att-save" id="asavebar" hidden><span class="muted" id="amsg"></span><button type="button" class="btn" id="asave">Save attendance</button></div>`;
-      let ed = null;
+      $('#aview').innerHTML = `<div class="card att-bar"><label>${isC ? 'Center' : 'Batch'}<select id="asel">${opts}</select></label><div class="date-step"><button type="button" class="btn secondary small" id="dprev">‹</button><label>Date<input type="date" id="adate" value="${S.date}"></label><button type="button" class="btn secondary small" id="dnext">›</button><button type="button" class="btn secondary small" id="dtoday">Today</button></div></div><div id="aroster"><p class="muted">Choose a center.</p></div>`;
+      let centerBatches = [];
       const load = async () => {
-        const key = isC ? S.center : S.batch; $('#asavebar').hidden = true;
+        const key = isC ? S.center : S.batch;
         if (!key || !S.date) { $('#aroster').innerHTML = empty('🗓️', isC ? 'Choose a center' : 'Choose a batch', 'Then pick the date.'); return; }
         $('#aroster').innerHTML = '<p class="muted">Loading…</p>';
         try {
-          let bs;
-          if (isC) bs = (await api('attendance-center?center_id=' + encodeURIComponent(key) + '&date=' + S.date)).batches;
-          else { const b = batches.find(x => x.id === key); bs = [{ ...b, students: await api('attendance?batch_id=' + encodeURIComponent(key) + '&date=' + S.date) }]; }
-          ed = rosterEditor($('#aroster'), bs.map(b => ({ ...b, removed: [] })), people, centers);
-          $('#asavebar').hidden = !bs.length; $('#amsg').textContent = '';
+          if (isC) {
+            centerBatches = (await api('attendance-center?center_id=' + encodeURIComponent(key) + '&date=' + S.date)).batches;
+            $('#aroster').innerHTML = centerBatches.length ? '<div class="att-batch-picker">' + centerBatches.map((b,i) => `<button class="card att-batch-link" type="button" data-open-batch="${i}"><b>${esc(b.name)}</b><span class="muted">${b.students.length} students</span></button>`).join('') + '</div><div id="batch-roster"></div>' : empty('🗓️','No batches','There are no active batches at this center.');
+            $$('#aroster [data-open-batch]').forEach(btn => btn.onclick = () => openBatch(centerBatches[+btn.dataset.openBatch]));
+          } else {
+            const b = batches.find(x => x.id === key);
+            const students = await api('attendance?batch_id=' + encodeURIComponent(key) + '&date=' + S.date);
+            openBatch({ ...b, students });
+          }
         } catch (e) { $('#aroster').innerHTML = `<p class="error">${esc(e.message)}</p>`; }
       };
-      $('#asel').onchange = e => { S[isC ? 'center' : 'batch'] = e.target.value; if (isC) { try { localStorage.setItem('mfu-att-center', e.target.value); } catch { /* ignore */ } } load(); };
+      const openBatch = b => {
+        const host = isC ? $('#batch-roster') : $('#aroster');
+        const ed = rosterEditor(host, [{ ...b, removed: [] }], people, centers);
+        const bar = document.createElement('div'); bar.className = 'att-save';
+        bar.innerHTML = '<span class="muted">Only marked students will be submitted.</span><button type="button" class="btn">Submit attendance</button>';
+        host.append(bar);
+        bar.querySelector('button').onclick = async () => {
+          const btn = bar.querySelector('button'); btn.disabled = true;
+          try {
+            const payload = ed.payload()[0];
+            const r = await api('attendance', { method: 'POST', body: JSON.stringify({ batch_id: b.id, date: S.date, records: payload.records, remove: payload.remove }) });
+            toast('Attendance submitted for ' + r.saved + ' marked students');
+            await load();
+          } catch (e) { toast(e.message); } finally { btn.disabled = false; }
+        };
+      };
+      $('#asel').onchange = e => { S[isC ? 'center' : 'batch'] = e.target.value; load(); };
       $('#adate').onchange = e => { S.date = e.target.value; load(); };
       $('#dprev').onclick = () => { S.date = addDays(S.date, -1); $('#adate').value = S.date; load(); };
       $('#dnext').onclick = () => { S.date = addDays(S.date, 1); $('#adate').value = S.date; load(); };
       $('#dtoday').onclick = () => { S.date = todayStr(); $('#adate').value = S.date; load(); };
-      $('#asave').onclick = async () => {
-        const btn = $('#asave'); btn.disabled = true;
-        try { const r = await api('attendance-center', { method: 'POST', body: JSON.stringify({ date: S.date, batches: ed.payload() }) }); toast('Attendance saved for ' + r.saved + ' students'); await load(); $('#amsg').textContent = 'Saved ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
-        catch (e) { $('#amsg').textContent = e.message; toast(e.message); } finally { btn.disabled = false; }
-      };
       load();
     }
     const centerView = () => takeView('center');
