@@ -12,17 +12,17 @@ export function readToken(request) {
 export async function getSession(request, env) {
   const token = readToken(request);
   if (!token) return null;
-  const row = await env.DB.prepare('SELECT role,student_id,parent_id,expires_at FROM sessions WHERE token_hash=?').bind(await sha256(token)).first();
+  const row = await env.DB.prepare('SELECT role,student_id,parent_id,coach_id,expires_at FROM sessions WHERE token_hash=?').bind(await sha256(token)).first();
   if (!row || row.expires_at < Math.floor(Date.now() / 1000)) return null;
   return row;
 }
 
 // Creates a session and returns the Set-Cookie header value.
-export async function startSession(env, role, seconds, parentId = null) {
+export async function startSession(env, role, seconds, parentId = null, coachId = null) {
   const now = Math.floor(Date.now() / 1000);
   await env.DB.prepare('DELETE FROM sessions WHERE expires_at<?').bind(now).run();
   const token = randomHex(32);
-  await env.DB.prepare('INSERT INTO sessions(token_hash,role,parent_id,expires_at) VALUES(?,?,?,?)').bind(await sha256(token), role, parentId, now + seconds).run();
+  await env.DB.prepare('INSERT INTO sessions(token_hash,role,parent_id,coach_id,expires_at) VALUES(?,?,?,?,?)').bind(await sha256(token), role, parentId, coachId, now + seconds).run();
   return sessionCookie(token, seconds);
 }
 

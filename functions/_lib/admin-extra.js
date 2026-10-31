@@ -20,7 +20,7 @@ async function listParents(env) {
 }
 
 // Recipients = distinct parent emails from student records plus parent accounts linked to those students.
-async function recipientsFor(env, audience = {}) {
+export async function recipientsFor(env, audience = {}) {
   let where = "COALESCE(s.active,1)=1", binds = [];
   if (audience.type === 'center' && audience.center_id) { where += ' AND s.center_id=?'; binds.push(audience.center_id); }
   if (audience.type === 'students') {

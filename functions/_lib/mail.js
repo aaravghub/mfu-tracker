@@ -4,6 +4,15 @@ import { esc, isHttpUrl } from './util.js';
 // The authenticated Gmail account is automallakhamb@gmail.com.
 export const mailConfigured = env => !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GMAIL_REFRESH_TOKEN);
 
+// The same Google refresh token also covers Calendar (Meet links) and Sheets once it is re-authorized with those scopes.
+let cachedToken = null;
+export async function googleAccessToken(env) {
+  if (cachedToken && cachedToken.exp > Date.now() + 60000) return cachedToken.token;
+  const token = await gmailAccessToken(env);
+  cachedToken = { token, exp: Date.now() + 50 * 60000 };
+  return token;
+}
+
 async function gmailAccessToken(env) {
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -38,7 +47,7 @@ export async function sendMessages(env, messages) {
   let sent = 0, failed = 0, error = '';
   if (!mailConfigured(env)) return { sent: 0, failed: messages.length, error: 'Gmail is not configured. Add the Google OAuth secrets in Cloudflare Pages.' };
   let token;
-  try { token = await gmailAccessToken(env); }
+  try { token = await googleAccessToken(env); }
   catch (e) { return { sent: 0, failed: messages.length, error: String(e.message || 'Gmail authorization failed.') }; }
   for (const m of messages) {
     try {
