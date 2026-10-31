@@ -230,7 +230,7 @@
     ['students', 'Add a student · import CSV · levels · profiles'], ['attendance', 'Take attendance · drop-ins · monthly report'], ['evaluations', 'Run an evaluation · Google Sheet · evaluators'],
     ['calendar', 'New meeting · Google Meet · calendar'], ['demos', 'Demos · demo routines'], ['competitions', 'Competition scores · leaderboard'], ['fitness', 'Fitness results · dasrang · push-ups'],
     ['timers', '1-minute timer · dasrang count · pace graph'], ['exercises', 'Exercises · sets · home practice'], ['assistant', 'Skill assistant · plain language'], ['email', 'Email parents'],
-    ['announcements', 'Post an announcement'], ['requests', 'Parent questions · meeting requests'], ['coach_accounts', 'Invite coaches · coach logins'], ['centers', 'Add a center'], ['parents', 'Parent accounts · invites'],
+    ['announcements', 'Post an announcement'], ['forms', 'Forms · sign-ups · RSVP · registration'], ['p_forms', 'Sign up · forms · RSVP'], ['requests', 'Parent questions · meeting requests'], ['coach_accounts', 'Invite coaches · coach logins'], ['centers', 'Add a center'], ['parents', 'Parent accounts · invites'],
     ['p_contact', 'Ask the coach · request a meeting · upload files'], ['p_practice', 'Home practice · exercises at home'], ['p_skills', 'All skills · levels'], ['p_events', 'Events · evaluations · competitions · demos'], ['account', 'Change password']
   ];
   let ssStudents = null, ssSel = 0;
@@ -272,7 +272,7 @@
   }, 15000);
 
   /* ---------- sidebar: a slim icon rail that slides open when the cursor is over it ---------- */
-  const ICONS = { overview: '🏠', coach_home: '🏠', home: '🏠', students: '🧒', batches: '👥', coaches: '🧑‍🏫', centers: '📍', attendance: '✅', fitness: '💪', exercises: '🏋️', skills: '📚', routines: '📝', calendar: '📅', evaluations: '📋', competitions: '🏆', demos: '🎪', events: '🗓️', parents: '👪', requests: '💬', announcements: '📣', signups: '📝', links: '🔗', shop: '🛍️', email: '✉️', assistant: '🤖', coach_accounts: '🔑', timers: '⏱️', c_account: '👤', account: '👤', p_skills: '📚', p_practice: '🏠', p_announcements: '📣', p_events: '📅', p_contact: '💬', p_links: '🔗', p_shop: '🛍️' };
+  const ICONS = { overview: '🏠', coach_home: '🏠', home: '🏠', students: '🧒', batches: '👥', coaches: '🧑‍🏫', centers: '📍', attendance: '✅', fitness: '💪', exercises: '🏋️', skills: '📚', routines: '📝', calendar: '📅', evaluations: '📋', competitions: '🏆', demos: '🎪', events: '🗓️', parents: '👪', requests: '💬', announcements: '📣', signups: '📝', forms: '🗒️', p_forms: '🗒️', links: '🔗', shop: '🛍️', email: '✉️', assistant: '🤖', coach_accounts: '🔑', timers: '⏱️', c_account: '👤', account: '👤', p_skills: '📚', p_practice: '🏠', p_announcements: '📣', p_events: '📅', p_contact: '💬', p_links: '🔗', p_shop: '🛍️' };
   const decorateNav = () => $$('#nav button[data-page]').forEach(b => { if (b.querySelector('.nav-ic')) return; const t = b.textContent; b.title = t; b.innerHTML = `<span class="nav-ic" aria-hidden="true">${ICONS[b.dataset.page] || '•'}</span><span class="nav-tx">${esc(t)}</span>`; });
   const store = (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } };
   const read = k => { try { return localStorage.getItem(k); } catch { return null; } };

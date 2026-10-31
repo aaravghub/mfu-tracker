@@ -7,6 +7,7 @@ import { handleCoachAuth, handleCoachAccounts } from '../_lib/coach.js';
 import { handleFeatures } from '../_lib/features.js';
 import { handlePractice } from '../_lib/practice.js';
 import { handleSignup, handleSignupReview } from '../_lib/signup.js';
+import { handleForms, handlePublicForm } from '../_lib/forms.js';
 import { GOOGLE_SCOPES } from '../_lib/google.js';
 // Coaches can do everything the admin can except manage coach and parent accounts.
 const adminOnly = (path, method) => { const [root] = path.split('/'); return root === 'coach-accounts' || root === 'signups' || (root === 'parents' && method !== 'GET') || (root === 'coaches' && method !== 'GET'); };
@@ -58,6 +59,7 @@ export async function onRequest({request,env,params}){
  if(path.startsWith('parent/'))return handleParent(path,method,request,env);
  if(path.startsWith('coach/'))return handleCoachAuth(path,method,request,env);
  if(path.startsWith('signup/'))return handleSignup(path,method,request,env);
+ if(path.startsWith('public-form/'))return handlePublicForm(path,method,request,env);
  const s=await session(request,env);if(!s||(s.role!=='admin'&&s.role!=='coach'))return json({error:'Please sign in as an administrator or coach.'},401);
  let actor={role:'admin',name:'Admin'};
  if(s.role==='coach'){const c=s.coach_id?await env.DB.prepare('SELECT id,name,email FROM coaches WHERE id=? AND COALESCE(active,1)=1 AND password_hash IS NOT NULL').bind(s.coach_id).first():null;if(!c)return json({error:'Please sign in again.'},401);if(adminOnly(path,method))return json({error:'Only the admin can manage coach and parent accounts.'},403);actor={role:'coach',id:c.id,name:c.name,email:c.email}}
@@ -65,6 +67,7 @@ export async function onRequest({request,env,params}){
  if(path==='signups'||path.startsWith('signups/'))return handleSignupReview(path,method,request,env,actor);
  { const f=await handleFeatures(path,method,request,env,url,actor);if(f)return f }
  { const pr=await handlePractice(path,method,request,env,url,actor);if(pr)return pr }
+ { const fm=await handleForms(path,method,request,env,url,actor);if(fm)return fm }
  { const extra=await handleAdminExtra(path,method,request,env,url);if(extra)return extra }
  if(path==='coach-centers'&&(method==='GET'||method==='POST')){try{await env.DB.prepare('CREATE TABLE IF NOT EXISTS coach_centers (coach_id TEXT NOT NULL REFERENCES coaches(id) ON DELETE CASCADE, center_id TEXT NOT NULL REFERENCES centers(id) ON DELETE CASCADE, PRIMARY KEY(coach_id,center_id))').run();if(method==='GET'){const coachId=url.searchParams.get('coach_id');if(!coachId)return json({error:'coach_id is required'},400);const rows=(await env.DB.prepare('SELECT center_id FROM coach_centers WHERE coach_id=? ORDER BY center_id').bind(coachId).all()).results;if(rows.length)return json(rows.map(r=>r.center_id));const coach=await env.DB.prepare('SELECT center_id FROM coaches WHERE id=?').bind(coachId).first();return json(coach?.center_id?[coach.center_id]:[])}const body=await request.json().catch(()=>null);if(!body||!body.coach_id||!Array.isArray(body.center_ids))return json({error:'coach_id and center_ids are required'},400);const centerIds=[...new Set(body.center_ids)];await env.DB.prepare('DELETE FROM coach_centers WHERE coach_id=?').bind(body.coach_id).run();for(const centerId of centerIds)await env.DB.prepare('INSERT INTO coach_centers(coach_id,center_id) VALUES(?,?)').bind(body.coach_id,centerId).run();await env.DB.prepare('UPDATE coaches SET center_id=? WHERE id=?').bind(centerIds[0]||null,body.coach_id).run();return json({ok:true,count:centerIds.length})}catch(e){return json({error:'Could not update center assignments. Check the coach and selected centers.'},400)}}
  if(path==='batch-coaches'&&method==='GET'){const batchId=url.searchParams.get('batch_id');if(!batchId)return json({error:'batch_id is required'},400);return json((await env.DB.prepare('SELECT coach_id FROM batch_coaches WHERE batch_id=?').bind(batchId).all()).results.map(r=>r.coach_id))}

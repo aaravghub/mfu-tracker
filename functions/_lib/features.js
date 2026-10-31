@@ -89,7 +89,7 @@ export async function parentExtras(env, parent, children) {
   const practice = await practiceFor(env, children.map(c => c.id));
   for (const c of children) c.practice = practice.filter(a => a.student_id === c.id);
   const centers = [...new Set(children.map(c => c.center_id).filter(Boolean))];
-  const announcements = await all(env, "SELECT id,title,body,pinned,created_at,created_by FROM announcements WHERE audience IN ('all','parents') AND (center_id IS NULL OR center_id=''" + (centers.length ? ' OR center_id IN (' + marks(centers) + ')' : '') + ') ORDER BY pinned DESC,created_at DESC LIMIT 50', ...centers);
+  const announcements = await all(env, "SELECT a.id,a.title,a.body,a.pinned,a.created_at,a.created_by,a.form_id,f.title AS form_title FROM announcements a LEFT JOIN forms f ON f.id=a.form_id AND f.status='open' WHERE a.audience IN ('all','parents') AND (a.center_id IS NULL OR a.center_id=''" + (centers.length ? ' OR a.center_id IN (' + marks(centers) + ')' : '') + ') ORDER BY a.pinned DESC,a.created_at DESC LIMIT 50', ...centers);
   const meetings = (await all(env, "SELECT id,title,meeting_date,start_time,end_time,location,description,meet_url,attendees FROM meetings WHERE meeting_date>=date('now','-1 day') ORDER BY meeting_date,start_time"))
     .filter(m => parseList(m.attendees).map(cleanEmail).includes(cleanEmail(parent.email))).map(({ attendees, ...m }) => m);
   const requests = await all(env, 'SELECT r.id,r.kind,r.subject,r.message,r.preferred_times,r.status,r.reply,r.replied_by,r.replied_at,r.created_at,s.first_name,s.last_name FROM parent_requests r LEFT JOIN students s ON s.id=r.student_id WHERE r.parent_id=? ORDER BY r.created_at DESC LIMIT 50', parent.id);
@@ -495,8 +495,8 @@ export async function handleFeatures(path, method, request, env, url, actor) {
       const title = str(body?.title, 200), text = str(body?.body, 6000), audience = ['all', 'parents', 'coaches'].includes(body?.audience) ? body.audience : 'all';
       if (!title) return json({ error: 'Add a title.' }, 400);
       const aid = id || crypto.randomUUID(), center = body.center_id || null;
-      if (id) await env.DB.prepare('UPDATE announcements SET title=?,body=?,audience=?,center_id=?,pinned=? WHERE id=?').bind(title, text, audience, center, body.pinned ? 1 : 0, id).run();
-      else await env.DB.prepare('INSERT INTO announcements(id,title,body,audience,center_id,pinned,created_by) VALUES(?,?,?,?,?,?,?)').bind(aid, title, text, audience, center, body.pinned ? 1 : 0, by).run();
+      if (id) await env.DB.prepare('UPDATE announcements SET title=?,body=?,audience=?,center_id=?,pinned=?,form_id=? WHERE id=?').bind(title, text, audience, center, body.pinned ? 1 : 0, body.form_id || null, id).run();
+      else await env.DB.prepare('INSERT INTO announcements(id,title,body,audience,center_id,pinned,created_by,form_id) VALUES(?,?,?,?,?,?,?,?)').bind(aid, title, text, audience, center, body.pinned ? 1 : 0, by, body.form_id || null).run();
       let sent = 0;
       if (body.send_email) {
         const people = [];
