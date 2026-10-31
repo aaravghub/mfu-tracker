@@ -114,6 +114,17 @@ nav button[data-page]{display:flex;align-items:center;gap:10px}
 .signup-link{margin-top:4px}
 @media(max-width:480px){.kid-row{grid-template-columns:1fr 1fr}.signup-form .two{grid-template-columns:1fr}}
 
+/* forms */
+.form-card{margin-bottom:12px}.form-card h3{margin:8px 0 4px}
+.q-edit{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.q-edit [data-k=label]{flex:1 1 240px}.q-edit select{max-width:170px}.q-edit .q-opts{flex:1 1 100%}
+.q-set{border:0;padding:0;margin:0}
+.form-grid .q-set label.pick,.signup-form .q-set label.pick{display:flex;gap:10px;align-items:center;font-weight:500;font-size:14px;color:var(--ink);padding:6px 0}
+.q-set .pick input,.form-grid label.check input{width:auto;flex:none}
+.form-grid label.check{display:flex;align-items:center;gap:8px}.q-set legend{font-weight:700;font-size:12px;color:#536075;margin-bottom:4px}
+.form-fill h2{margin:8px 0 4px;font:800 22px Manrope,sans-serif}
+.form-login-note{margin:0 0 6px;font-size:13px}
+
 /* sign-up review and evaluation finalize */
 .su-card{margin-bottom:14px}.su-card h3{margin:10px 0 4px}
 .su-kid{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0}

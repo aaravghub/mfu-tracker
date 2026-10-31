@@ -3,6 +3,7 @@ import { getSession, startSession, endSession } from './auth.js';
 import { mailConfigured, sendMessages, siteUrl, wrap } from './mail.js';
 import { esc } from './util.js';
 import { parentExtras, handleParentFeatures } from './features.js';
+import { parentForms, handleParentForms } from './forms.js';
 
 const PARENT_SESSION_SECONDS = 7 * 24 * 3600;
 const TOKEN_SECONDS = 7 * 24 * 3600;
@@ -127,10 +128,12 @@ export async function handleParent(path, method, request, env) {
     const seen = new Set();
     for (const c of children) for (const d of c.demos) if (d.demo_date >= new Date(Date.now() - 864e5).toISOString().slice(0, 10) && !seen.has(d.id)) { seen.add(d.id); events.push({ id: d.id, title: d.title, event_type: 'demo', event_date: d.demo_date, event_time: d.start_time, arrive_time: d.arrive_time, location: d.location, details: d.details }); }
     events.sort((a, b) => (a.event_date + (a.event_time || '')).localeCompare(b.event_date + (b.event_time || '')));
-    return json({ parent, children, events, links, shop, ...extras });
+    const forms = await parentForms(env, parent, children);
+    return json({ parent, children, events, links, shop, forms, ...extras });
   }
 
   { const f = await handleParentFeatures(sub, method, body, env, request, parent); if (f) return f; }
+  { const f = await handleParentForms(sub, method, body, env, parent); if (f) return f; }
 
   return json({ error: 'Unknown API route.' }, 404);
 }
