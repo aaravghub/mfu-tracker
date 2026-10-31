@@ -268,7 +268,7 @@
   }, 15000);
 
   /* ---------- sidebar: a slim icon rail that slides open when the cursor is over it ---------- */
-  const ICONS = { overview: '🏠', coach_home: '🏠', home: '🏠', students: '🧒', batches: '👥', coaches: '🧑‍🏫', centers: '📍', attendance: '✅', fitness: '💪', exercises: '🏋️', skills: '📚', routines: '📝', calendar: '📅', evaluations: '📋', competitions: '🏆', demos: '🎪', events: '🗓️', parents: '👪', requests: '💬', announcements: '📣', links: '🔗', shop: '🛍️', email: '✉️', assistant: '🤖', coach_accounts: '🔑', timers: '⏱️', c_account: '👤', account: '👤', p_skills: '📚', p_practice: '🏠', p_announcements: '📣', p_events: '📅', p_contact: '💬', p_links: '🔗', p_shop: '🛍️' };
+  const ICONS = { overview: '🏠', coach_home: '🏠', home: '🏠', students: '🧒', batches: '👥', coaches: '🧑‍🏫', centers: '📍', attendance: '✅', fitness: '💪', exercises: '🏋️', skills: '📚', routines: '📝', calendar: '📅', evaluations: '📋', competitions: '🏆', demos: '🎪', events: '🗓️', parents: '👪', requests: '💬', announcements: '📣', signups: '📝', links: '🔗', shop: '🛍️', email: '✉️', assistant: '🤖', coach_accounts: '🔑', timers: '⏱️', c_account: '👤', account: '👤', p_skills: '📚', p_practice: '🏠', p_announcements: '📣', p_events: '📅', p_contact: '💬', p_links: '🔗', p_shop: '🛍️' };
   const decorateNav = () => $$('#nav button[data-page]').forEach(b => { if (b.querySelector('.nav-ic')) return; const t = b.textContent; b.title = t; b.innerHTML = `<span class="nav-ic" aria-hidden="true">${ICONS[b.dataset.page] || '•'}</span><span class="nav-tx">${esc(t)}</span>`; });
   const store = (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } };
   const read = k => { try { return localStorage.getItem(k); } catch { return null; } };
