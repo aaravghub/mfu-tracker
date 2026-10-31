@@ -158,10 +158,10 @@
   };
 
   /* ---------- one student's attendance (opened from Students and from the report) ---------- */
-  window.studentAttendanceModal = async function (student) {
+  window.studentAttendanceModal = async function (student, host) {
     if (!student) return;
     let month = todayStr().slice(0, 7);
-    const m = openModal('Attendance · ' + nameOf(student), '<div id="sa"><p class="muted">Loading…</p></div>', { wide: true });
+    const m = host ? hostView(host, '<div id="sa"><p class="muted">Loading…</p></div>') : openModal('Attendance · ' + nameOf(student), '<div id="sa"><p class="muted">Loading…</p></div>', { wide: true });
     const [batches, centers] = await Promise.all([api('batches').catch(() => []), api('centers').catch(() => [])]);
     const load = async () => {
       try { render(await api('attendance-student?student_id=' + encodeURIComponent(student.id) + '&month=' + month)); }

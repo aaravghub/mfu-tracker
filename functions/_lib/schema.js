@@ -17,6 +17,7 @@ const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS meetings (id TEXT PRIMARY KEY, title TEXT NOT NULL, meeting_date TEXT NOT NULL, start_time TEXT, end_time TEXT, location TEXT, description TEXT DEFAULT '', meet_url TEXT, calendar_event_id TEXT, calendar_url TEXT, attendees TEXT DEFAULT '[]', request_id TEXT, created_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS demos (id TEXT PRIMARY KEY, title TEXT NOT NULL, demo_date TEXT NOT NULL, start_time TEXT, end_time TEXT, arrive_time TEXT, location TEXT, center_id TEXT, details TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS demo_students (demo_id TEXT NOT NULL REFERENCES demos(id) ON DELETE CASCADE, student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE, status TEXT, PRIMARY KEY(demo_id,student_id))`,
+  `CREATE TABLE IF NOT EXISTS demo_routines (id TEXT PRIMARY KEY, demo_id TEXT NOT NULL REFERENCES demos(id) ON DELETE CASCADE, title TEXT NOT NULL, apparatus TEXT DEFAULT 'group', content TEXT DEFAULT '', video_url TEXT, student_ids TEXT DEFAULT '[]', sort_order INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS eval_participants (event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE, student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE, coach_id TEXT REFERENCES coaches(id) ON DELETE SET NULL, status TEXT, PRIMARY KEY(event_id,student_id))`,
   `CREATE TABLE IF NOT EXISTS eval_reports (id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE, student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE, apparatus TEXT NOT NULL, from_level INTEGER, target_level INTEGER NOT NULL, coach_id TEXT REFERENCES coaches(id) ON DELETE SET NULL, outcome TEXT NOT NULL DEFAULT 'not_passed', notes TEXT DEFAULT '', updated_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(event_id,student_id,apparatus))`,
   `CREATE TABLE IF NOT EXISTS eval_results (report_id TEXT NOT NULL REFERENCES eval_reports(id) ON DELETE CASCADE, skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE, result TEXT NOT NULL CHECK(result IN ('pass','fail')), PRIMARY KEY(report_id,skill_id))`,
@@ -43,7 +44,9 @@ const COLUMNS = [
   ['coaches', 'password_hash', 'TEXT'],
   ['coaches', 'password_salt', 'TEXT'],
   ['coaches', 'last_login', 'TEXT'],
-  ['coaches', 'invited_at', 'TEXT']
+  ['coaches', 'invited_at', 'TEXT'],
+  ['coaches', 'tour_done', 'INTEGER DEFAULT 0'],
+  ['parents', 'tour_done', 'INTEGER DEFAULT 0']
 ];
 
 // The original sessions table only allowed admin and parent roles. Rebuild it once so coach sessions fit, keeping everyone signed in.

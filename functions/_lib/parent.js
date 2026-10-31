@@ -34,7 +34,13 @@ export async function emailSetupLinks(env, request, items) {
 async function childrenFor(env, parentId) {
   const students = (await env.DB.prepare("SELECT s.id,s.first_name,s.last_name,s.center_id,s.photo_url,s.pole_level,s.rope_level,s.yoga_level FROM parent_students ps JOIN students s ON s.id=ps.student_id WHERE ps.parent_id=? AND COALESCE(s.active,1)=1 ORDER BY s.first_name").bind(parentId).all()).results;
   const out = [];
-  for (const s of students) {
+  for (const s of students) out.push(await studentDetail(env, s));
+  return out;
+}
+
+// Everything a parent sees about one child. The admin/coach student profile reuses it.
+export async function studentDetail(env, s) {
+  {
     const [batches, agg, recent, skills, routines] = await env.DB.batch([
       env.DB.prepare("SELECT b.name,b.days,b.start_time,b.end_time,0 AS drop_in FROM batch_students bs JOIN batches b ON b.id=bs.batch_id WHERE bs.student_id=? UNION SELECT b.name,b.days,b.start_time,b.end_time,1 FROM student_attendance sa JOIN batches b ON b.id=sa.batch_id WHERE sa.student_id=? AND sa.drop_in=1 AND sa.attendance_date>=date('now','-90 days') AND NOT EXISTS(SELECT 1 FROM batch_students x WHERE x.batch_id=sa.batch_id AND x.student_id=sa.student_id) ORDER BY 1").bind(s.id, s.id),
       env.DB.prepare("SELECT status,COUNT(*) n FROM student_attendance WHERE student_id=? AND attendance_date>=date('now','-90 days') GROUP BY status").bind(s.id),
@@ -44,9 +50,8 @@ async function childrenFor(env, parentId) {
     ]);
     const att = { present: 0, late: 0, absent: 0, excused: 0 };
     for (const r of agg.results) att[r.status] = r.n;
-    out.push({ ...s, batches: batches.results, attendance: att, recent_attendance: recent.results, skills: skills.results, routines: routines.results });
+    return { ...s, batches: batches.results, attendance: att, recent_attendance: recent.results, skills: skills.results, routines: routines.results };
   }
-  return out;
 }
 
 export async function handleParent(path, method, request, env) {
@@ -101,6 +106,11 @@ export async function handleParent(path, method, request, env) {
     if (typeof body.password !== 'string' || body.password.length < 8 || body.password.length > 200) return json({ error: 'New password must be at least 8 characters.' }, 400);
     const { salt, hash } = await makePassword(body.password);
     await env.DB.prepare('UPDATE parents SET password_hash=?,password_salt=? WHERE id=?').bind(hash, salt, parent.id).run();
+    return json({ ok: true });
+  }
+
+  if (sub === 'tour' && method === 'POST') {
+    await env.DB.prepare('UPDATE parents SET tour_done=1 WHERE id=?').bind(parent.id).run();
     return json({ ok: true });
   }
 

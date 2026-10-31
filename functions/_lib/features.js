@@ -2,6 +2,7 @@ import { json, cleanEmail, isEmail, isHttpUrl, esc } from './util.js';
 import { mailConfigured, sendMessages, siteUrl, wrap } from './mail.js';
 import { createMeetEvent, deleteCalendarEvent, writeSpreadsheet } from './google.js';
 import { recipientsFor } from './admin-extra.js';
+import { studentDetail } from './parent.js';
 
 // Calendar & meetings, demos, evaluations, competition scores, notes, fitness, photos, parent requests and announcements.
 const marks = a => a.map(() => '?').join(',');
@@ -67,6 +68,10 @@ export async function parentExtras(env, parent, children) {
       env.DB.prepare('SELECT d.id,d.title,d.demo_date,d.start_time,d.end_time,d.arrive_time,d.location,d.details,ds.status FROM demo_students ds JOIN demos d ON d.id=ds.demo_id WHERE ds.student_id=? ORDER BY d.demo_date DESC').bind(c.id),
       env.DB.prepare('SELECT id,exercise,record_date,total,duration,taps,created_at FROM rep_sessions WHERE student_id=? ORDER BY record_date DESC,created_at DESC LIMIT 30').bind(c.id)
     ]);
+    // Demo routines for the demos this child is in (a routine with no performers listed is for the whole group).
+    const demoIds = demos.results.map(d => d.id);
+    const routines = demoIds.length ? await all(env, `SELECT id,demo_id,title,apparatus,content,video_url,student_ids FROM demo_routines WHERE demo_id IN (${marks(demoIds)}) ORDER BY sort_order,created_at`, ...demoIds) : [];
+    for (const d of demos.results) d.routines = routines.filter(r => r.demo_id === d.id).map(r => ({ ...r, student_ids: parseList(r.student_ids) })).filter(r => !r.student_ids.length || r.student_ids.includes(c.id)).map(({ student_ids, ...r }) => r);
     Object.assign(c, { rep_sessions: reps.results.map(r => ({ ...r, taps: parseList(r.taps) })), notes: notes.results, fitness: fitness.results, photos: photos.results, comp_scores: scores.results, evaluations: evals.results.map(r => ({ ...r, change: changeLabel(r) })), demos: demos.results });
     c.coaches = (await coachesForStudent(env, c.id)).map(x => ({ id: x.id, name: x.name }));
   }
@@ -179,7 +184,17 @@ export async function handleFeatures(path, method, request, env, url, actor) {
         env.DB.prepare('SELECT * FROM demos ORDER BY demo_date DESC'),
         env.DB.prepare('SELECT ds.demo_id,ds.student_id,ds.status,s.first_name,s.last_name,s.center_id,s.parent_email FROM demo_students ds JOIN students s ON s.id=ds.student_id ORDER BY s.first_name')
       ]);
-      return json(demos.results.map(d => ({ ...d, students: kids.results.filter(k => k.demo_id === d.id) })));
+      const routines = await all(env, 'SELECT * FROM demo_routines ORDER BY sort_order,created_at');
+      return json(demos.results.map(d => ({ ...d, students: kids.results.filter(k => k.demo_id === d.id), routines: routines.filter(r => r.demo_id === d.id).map(r => ({ ...r, student_ids: parseList(r.student_ids) })) })));
+    }
+    if (method === 'POST' && id && action === 'routines') {
+      const title = str(body?.title, 200);
+      if (!title) return json({ error: 'Give the routine a name.' }, 400);
+      if (body.video_url && !isHttpUrl(body.video_url)) return json({ error: 'Links must start with http:// or https://' }, 400);
+      if (!(await one(env, 'SELECT 1 x FROM demos WHERE id=?', id))) return json({ error: 'Demo not found.' }, 404);
+      const rid = crypto.randomUUID(), n = (await one(env, 'SELECT COUNT(*) n FROM demo_routines WHERE demo_id=?', id)).n;
+      await env.DB.prepare('INSERT INTO demo_routines(id,demo_id,title,apparatus,content,video_url,student_ids,sort_order) VALUES(?,?,?,?,?,?,?,?)').bind(rid, id, title, ['pole', 'rope', 'yoga', 'group'].includes(body.apparatus) ? body.apparatus : 'group', str(body.content, 8000), body.video_url || null, JSON.stringify((body.student_ids || []).filter(x => typeof x === 'string')), n).run();
+      return json({ ok: true, id: rid }, 201);
     }
     if ((method === 'POST' && !id) || (method === 'PUT' && id)) {
       const title = str(body?.title, 200);
@@ -215,6 +230,33 @@ export async function handleFeatures(path, method, request, env, url, actor) {
       return json({ ok: true, sent: r.sent, failed: r.failed });
     }
     if (method === 'DELETE' && id) { await env.DB.prepare('DELETE FROM demos WHERE id=?').bind(id).run(); return json({ ok: true }); }
+  }
+
+  if (root === 'demo-routines' && id) {
+    if (method === 'PUT') {
+      const title = str(body?.title, 200);
+      if (!title) return json({ error: 'Give the routine a name.' }, 400);
+      if (body.video_url && !isHttpUrl(body.video_url)) return json({ error: 'Links must start with http:// or https://' }, 400);
+      await env.DB.prepare('UPDATE demo_routines SET title=?,apparatus=?,content=?,video_url=?,student_ids=? WHERE id=?').bind(title, ['pole', 'rope', 'yoga', 'group'].includes(body.apparatus) ? body.apparatus : 'group', str(body.content, 8000), body.video_url || null, JSON.stringify((body.student_ids || []).filter(x => typeof x === 'string')), id).run();
+      return json({ ok: true });
+    }
+    if (method === 'DELETE') { await env.DB.prepare('DELETE FROM demo_routines WHERE id=?').bind(id).run(); return json({ ok: true }); }
+  }
+
+  // ---- one student's full profile (same view parents get) ----
+  if (root === 'student-summary' && method === 'GET') {
+    const s = await one(env, 'SELECT id,first_name,last_name,center_id,photo_url,pole_level,rope_level,yoga_level,parent_name,parent_email,parent_phone,notes,active FROM students WHERE id=?', q('student_id') || '');
+    if (!s) return json({ error: 'Student not found.' }, 404);
+    const child = await studentDetail(env, s);
+    await parentExtras(env, { id: '', email: '' }, [child]);
+    child.parents = await all(env, 'SELECT p.id,p.name,p.email,(p.password_hash IS NOT NULL) AS has_password,p.last_login FROM parent_students ps JOIN parents p ON p.id=ps.parent_id WHERE ps.student_id=?', s.id);
+    return json(child);
+  }
+
+  // ---- the tutorial only plays on a coach's first sign-in ----
+  if (root === 'tour' && method === 'POST') {
+    if (actor.role === 'coach') await env.DB.prepare('UPDATE coaches SET tour_done=1 WHERE id=?').bind(actor.id).run();
+    return json({ ok: true });
   }
 
   // ---- evaluations: participants, assigned evaluator, attendance, per-skill reports, summary, Google Sheet ----
