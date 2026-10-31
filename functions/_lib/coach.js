@@ -1,4 +1,4 @@
-import { json, cleanEmail, isEmail, checkPassword, makePassword, sha256, randomHex, isBlocked, recordFail, clearFails, clientKey, esc } from './util.js';
+import { json, cleanEmail, isEmail, checkPassword, makePassword, sha256, randomHex, isBlocked, recordFail, clearFails, clientKey, esc, passwordProblem } from './util.js';
 import { getSession, startSession } from './auth.js';
 import { mailConfigured, sendMessages, siteUrl, wrap } from './mail.js';
 
@@ -53,10 +53,11 @@ export async function handleCoachAuth(path, method, request, env) {
 
   if (sub === 'set-password' && method === 'POST') {
     const pw = body.password;
-    if (typeof body.token !== 'string' || typeof pw !== 'string' || pw.length < 8 || pw.length > 200) return json({ error: 'Choose a password with at least 8 characters.' }, 400);
+    if (typeof body.token !== 'string') return json({ error: 'This link is not valid.' }, 400);
     const th = await sha256(body.token);
-    const row = await env.DB.prepare('SELECT coach_id,expires_at FROM coach_password_tokens WHERE token_hash=?').bind(th).first();
+    const row = await env.DB.prepare('SELECT t.coach_id,t.expires_at,c.email FROM coach_password_tokens t JOIN coaches c ON c.id=t.coach_id WHERE t.token_hash=?').bind(th).first();
     if (!row || row.expires_at < Math.floor(Date.now() / 1000)) return json({ error: 'This link has expired. Ask the admin for a new one.' }, 400);
+    { const bad = passwordProblem(pw, row.email); if (bad) return json({ error: bad }, 400); }
     const { salt, hash } = await makePassword(pw);
     await env.DB.batch([
       env.DB.prepare("UPDATE coaches SET password_hash=?,password_salt=?,last_login=datetime('now') WHERE id=?").bind(hash, salt, row.coach_id),
@@ -71,7 +72,7 @@ export async function handleCoachAuth(path, method, request, env) {
     if (!s || s.role !== 'coach' || !s.coach_id) return json({ error: 'Please sign in.' }, 401);
     const cur = await env.DB.prepare('SELECT password_hash,password_salt FROM coaches WHERE id=?').bind(s.coach_id).first();
     if (!cur || !(await checkPassword(String(body.current || ''), cur.password_salt, cur.password_hash))) return json({ error: 'Your current password is incorrect.' }, 400);
-    if (typeof body.password !== 'string' || body.password.length < 8 || body.password.length > 200) return json({ error: 'New password must be at least 8 characters.' }, 400);
+    { const em = await env.DB.prepare('SELECT email FROM coaches WHERE id=?').bind(s.coach_id).first(); const bad = passwordProblem(body.password, em?.email); if (bad) return json({ error: bad }, 400); }
     const { salt, hash } = await makePassword(body.password);
     await env.DB.prepare('UPDATE coaches SET password_hash=?,password_salt=? WHERE id=?').bind(hash, salt, s.coach_id).run();
     return json({ ok: true });

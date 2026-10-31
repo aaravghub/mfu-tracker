@@ -3,6 +3,7 @@ import { mailConfigured, sendMessages, siteUrl, wrap } from './mail.js';
 import { createMeetEvent, deleteCalendarEvent, writeSpreadsheet } from './google.js';
 import { recipientsFor } from './admin-extra.js';
 import { studentDetail } from './parent.js';
+import { practiceFor, decodeFiles, fileStatements, filesFor, fileResponse, parentCheckin } from './practice.js';
 
 // Calendar & meetings, demos, evaluations, competition scores, notes, fitness, photos, parent requests and announcements.
 const marks = a => a.map(() => '?').join(',');
@@ -44,8 +45,8 @@ async function evalData(env, eventId) {
   const event = await one(env, 'SELECT * FROM events WHERE id=?', eventId);
   if (!event) return null;
   const [participants, reports, results] = await env.DB.batch([
-    env.DB.prepare('SELECT ep.student_id,ep.coach_id,ep.status,s.first_name,s.last_name,s.center_id,s.pole_level,s.rope_level,s.yoga_level,c.name AS coach_name FROM eval_participants ep JOIN students s ON s.id=ep.student_id LEFT JOIN coaches c ON c.id=ep.coach_id WHERE ep.event_id=? ORDER BY s.last_name,s.first_name').bind(eventId),
-    env.DB.prepare('SELECT r.*,s.first_name,s.last_name,s.pole_level,s.rope_level,s.yoga_level,c.name AS coach_name FROM eval_reports r JOIN students s ON s.id=r.student_id LEFT JOIN coaches c ON c.id=r.coach_id WHERE r.event_id=? ORDER BY s.last_name,s.first_name,r.apparatus').bind(eventId),
+    env.DB.prepare('SELECT ep.student_id,ep.coach_id,ep.coach2_id,ep.status,s.first_name,s.last_name,s.center_id,s.pole_level,s.rope_level,s.yoga_level,c.name AS coach_name,c2.name AS coach2_name FROM eval_participants ep JOIN students s ON s.id=ep.student_id LEFT JOIN coaches c ON c.id=ep.coach_id LEFT JOIN coaches c2 ON c2.id=ep.coach2_id WHERE ep.event_id=? ORDER BY s.last_name,s.first_name').bind(eventId),
+    env.DB.prepare('SELECT r.*,s.first_name,s.last_name,s.center_id,s.pole_level,s.rope_level,s.yoga_level,c.name AS coach_name,c2.name AS coach2_name FROM eval_reports r JOIN students s ON s.id=r.student_id LEFT JOIN coaches c ON c.id=r.coach_id LEFT JOIN coaches c2 ON c2.id=r.coach2_id WHERE r.event_id=? ORDER BY s.last_name,s.first_name,r.apparatus').bind(eventId),
     env.DB.prepare('SELECT er.report_id,er.skill_id,er.result,sk.name,sk.level FROM eval_results er JOIN eval_reports r ON r.id=er.report_id JOIN skills sk ON sk.id=er.skill_id WHERE r.event_id=? ORDER BY sk.level,sk.sort_order,sk.name').bind(eventId)
   ]);
   return {
@@ -74,12 +75,24 @@ export async function parentExtras(env, parent, children) {
     for (const d of demos.results) d.routines = routines.filter(r => r.demo_id === d.id).map(r => ({ ...r, student_ids: parseList(r.student_ids) })).filter(r => !r.student_ids.length || r.student_ids.includes(c.id)).map(({ student_ids, ...r }) => r);
     Object.assign(c, { rep_sessions: reps.results.map(r => ({ ...r, taps: parseList(r.taps) })), notes: notes.results, fitness: fitness.results, photos: photos.results, comp_scores: scores.results, evaluations: evals.results.map(r => ({ ...r, change: changeLabel(r) })), demos: demos.results });
     c.coaches = (await coachesForStudent(env, c.id)).map(x => ({ id: x.id, name: x.name }));
+    // Month-by-month numbers for the progress graphs (last 12 months).
+    const [att, started, done] = await env.DB.batch([
+      env.DB.prepare("SELECT substr(attendance_date,1,7) AS month,SUM(status IN ('present','late')) AS n FROM student_attendance WHERE student_id=? AND attendance_date>=date('now','start of month','-11 months') GROUP BY month").bind(c.id),
+      env.DB.prepare("SELECT substr(started_date,1,7) AS month,COUNT(*) AS n FROM student_skill_progress WHERE student_id=? AND started_date>=date('now','start of month','-11 months') GROUP BY month").bind(c.id),
+      env.DB.prepare("SELECT substr(mastered_date,1,7) AS month,COUNT(*) AS n FROM student_skill_progress WHERE student_id=? AND status='mastered' AND mastered_date>=date('now','start of month','-11 months') GROUP BY month").bind(c.id)
+    ]);
+    c.monthly = { attendance: att.results, started: started.results, completed: done.results };
   }
+  // Home practice assigned by coaches.
+  const practice = await practiceFor(env, children.map(c => c.id));
+  for (const c of children) c.practice = practice.filter(a => a.student_id === c.id);
   const centers = [...new Set(children.map(c => c.center_id).filter(Boolean))];
   const announcements = await all(env, "SELECT id,title,body,pinned,created_at,created_by FROM announcements WHERE audience IN ('all','parents') AND (center_id IS NULL OR center_id=''" + (centers.length ? ' OR center_id IN (' + marks(centers) + ')' : '') + ') ORDER BY pinned DESC,created_at DESC LIMIT 50', ...centers);
   const meetings = (await all(env, "SELECT id,title,meeting_date,start_time,end_time,location,description,meet_url,attendees FROM meetings WHERE meeting_date>=date('now','-1 day') ORDER BY meeting_date,start_time"))
     .filter(m => parseList(m.attendees).map(cleanEmail).includes(cleanEmail(parent.email))).map(({ attendees, ...m }) => m);
   const requests = await all(env, 'SELECT r.id,r.kind,r.subject,r.message,r.preferred_times,r.status,r.reply,r.replied_by,r.replied_at,r.created_at,s.first_name,s.last_name FROM parent_requests r LEFT JOIN students s ON s.id=r.student_id WHERE r.parent_id=? ORDER BY r.created_at DESC LIMIT 50', parent.id);
+  const files = await filesFor(env, requests.map(r => r.id));
+  for (const r of requests) r.files = files.filter(f => f.request_id === r.id);
   return { announcements, meetings, requests };
 }
 
@@ -89,17 +102,22 @@ export async function handleParentFeatures(sub, method, body, env, request, pare
     if (!subject) return json({ error: 'Add a short subject.' }, 400);
     const kid = body.student_id ? await one(env, 'SELECT s.id,s.first_name,s.last_name FROM parent_students ps JOIN students s ON s.id=ps.student_id WHERE ps.parent_id=? AND s.id=?', parent.id, body.student_id) : null;
     if (!kid) return json({ error: 'Choose which child this is about.' }, 400);
+    let files;
+    try { files = decodeFiles(body.files); } catch (e) { return json({ error: e.message }, 400); }
     const rid = crypto.randomUUID();
-    await env.DB.prepare('INSERT INTO parent_requests(id,parent_id,student_id,kind,subject,message,preferred_times) VALUES(?,?,?,?,?,?,?)').bind(rid, parent.id, kid.id, kind, subject, message, times).run();
+    await env.DB.batch([env.DB.prepare('INSERT INTO parent_requests(id,parent_id,student_id,kind,subject,message,preferred_times) VALUES(?,?,?,?,?,?,?)').bind(rid, parent.id, kid.id, kind, subject, message, times), ...fileStatements(env, rid, files)]);
     const coaches = await coachesForStudent(env, kid.id);
     const who = (parent.name || parent.email) + ' (' + parent.email + ')';
     const lines = [`${who} sent a ${kind === 'meeting' ? 'meeting request' : 'question'} about ${kid.first_name} ${kid.last_name}.`, 'Subject: ' + subject];
     if (message) lines.push(message);
     if (times) lines.push('Times that work for them: ' + times);
+    if (files.length) lines.push(`${files.length} file${files.length > 1 ? 's' : ''} attached (${files.map(f => f.name).join(', ')}) — open the request in MFU Tracker to see ${files.length > 1 ? 'them' : 'it'}.`);
     lines.push('Reply or schedule a meeting from Parent requests in MFU Tracker: ' + siteUrl(env, request));
     await notify(env, [{ email: adminEmail(env), name: 'Admin' }, ...coaches], (kind === 'meeting' ? 'Meeting request: ' : 'Parent question: ') + subject, lines);
-    return json({ ok: true, id: rid, notified: coaches.length + 1 }, 201);
+    return json({ ok: true, id: rid, notified: coaches.length + 1, files: files.length }, 201);
   }
+  if (sub.startsWith('request-files/') && method === 'GET') return fileResponse(env, sub.split('/')[1], parent.id);
+  if (sub === 'practice/checkin' && method === 'POST') return parentCheckin(env, parent.id, body);
   return null;
 }
 
@@ -204,12 +222,10 @@ export async function handleFeatures(path, method, request, env, url, actor) {
       const vals = [title, body.demo_date, body.start_time || null, body.end_time || null, body.arrive_time || null, str(body.location, 300) || null, body.center_id || null, str(body.details, 4000)];
       if (id) await env.DB.prepare('UPDATE demos SET title=?,demo_date=?,start_time=?,end_time=?,arrive_time=?,location=?,center_id=?,details=? WHERE id=?').bind(...vals, id).run();
       else await env.DB.prepare('INSERT INTO demos(title,demo_date,start_time,end_time,arrive_time,location,center_id,details,id) VALUES(?,?,?,?,?,?,?,?,?)').bind(...vals, did).run();
-      if (Array.isArray(body.student_ids)) {
-        const ids = [...new Set(body.student_ids.filter(x => typeof x === 'string'))];
-        const st = [env.DB.prepare(`DELETE FROM demo_students WHERE demo_id=?${ids.length ? ` AND student_id NOT IN (${marks(ids)})` : ''}`).bind(did, ...ids)];
-        for (const sid of ids) st.push(env.DB.prepare('INSERT OR IGNORE INTO demo_students(demo_id,student_id) SELECT ?,id FROM students WHERE id=?').bind(did, sid));
-        await env.DB.batch(st);
-      }
+      // Kids are added and removed one by one, so two people editing the same demo don't undo each other.
+      const add = [...new Set((body.add_student_ids || body.student_ids || []).filter(x => typeof x === 'string'))], remove = (body.remove_student_ids || []).filter(x => typeof x === 'string');
+      const st = [...add.map(sid => env.DB.prepare('INSERT OR IGNORE INTO demo_students(demo_id,student_id) SELECT ?,id FROM students WHERE id=?').bind(did, sid)), ...remove.map(sid => env.DB.prepare('DELETE FROM demo_students WHERE demo_id=? AND student_id=?').bind(did, sid))];
+      if (st.length) await env.DB.batch(st);
       return json({ ok: true, id: did }, id ? 200 : 201);
     }
     if (method === 'POST' && id && action === 'attendance') {
@@ -265,12 +281,13 @@ export async function handleFeatures(path, method, request, env, url, actor) {
     const event = await one(env, 'SELECT id,title,event_date,event_type,sheet_id FROM events WHERE id=?', id);
     if (!event) return json({ error: 'Evaluation not found.' }, 404);
     if (method === 'POST' && action === 'participants') {
+      // Only adds/updates the students sent and removes the ones listed, so two laptops adding kids never wipe each other out.
       const list = (body?.participants || []).filter(p => p && typeof p.student_id === 'string');
-      const ids = [...new Set(list.map(p => p.student_id))];
-      const st = [env.DB.prepare(`DELETE FROM eval_participants WHERE event_id=?${ids.length ? ` AND student_id NOT IN (${marks(ids)})` : ''}`).bind(id, ...ids)];
-      for (const p of list) st.push(env.DB.prepare('INSERT INTO eval_participants(event_id,student_id,coach_id) SELECT ?,id,? FROM students WHERE id=? ON CONFLICT(event_id,student_id) DO UPDATE SET coach_id=excluded.coach_id').bind(id, p.coach_id || null, p.student_id));
-      await env.DB.batch(st);
-      return json({ ok: true, count: ids.length });
+      const remove = (body?.remove || []).filter(x => typeof x === 'string');
+      const st = list.map(p => env.DB.prepare('INSERT INTO eval_participants(event_id,student_id,coach_id,coach2_id) SELECT ?,id,?,? FROM students WHERE id=? ON CONFLICT(event_id,student_id) DO UPDATE SET coach_id=excluded.coach_id,coach2_id=excluded.coach2_id').bind(id, p.coach_id || null, p.coach2_id && p.coach2_id !== p.coach_id ? p.coach2_id : null, p.student_id));
+      for (const sid of remove) st.push(env.DB.prepare('DELETE FROM eval_participants WHERE event_id=? AND student_id=?').bind(id, sid));
+      if (st.length) await env.DB.batch(st);
+      return json({ ok: true, added: list.length, removed: remove.length });
     }
     if (method === 'POST' && action === 'attendance') {
       const recs = (body?.records || []).filter(r => r && typeof r.student_id === 'string');
@@ -281,19 +298,21 @@ export async function handleFeatures(path, method, request, env, url, actor) {
     if (method === 'POST' && action === 'report') {
       const app = body?.apparatus, target = Number(body?.target_level), outcome = body?.outcome === 'passed' ? 'passed' : 'not_passed';
       if (!APPS.includes(app) || !Number.isInteger(target) || target < 1 || target > 5) return json({ error: 'Choose an apparatus and a level from 1 to 5.' }, 400);
-      const student = await one(env, 'SELECT id,pole_level,rope_level,yoga_level FROM students WHERE id=?', body.student_id);
+      if (!body.coach_id) return json({ error: 'Choose an evaluator for this student before saving.' }, 400);
+      const coach2 = body.coach2_id && body.coach2_id !== body.coach_id ? body.coach2_id : null;
+      const student = await one(env, 'SELECT id,first_name,last_name,pole_level,rope_level,yoga_level FROM students WHERE id=?', body.student_id);
       if (!student) return json({ error: 'Student not found.' }, 404);
-      const results = (body.results || []).filter(r => r && typeof r.skill_id === 'string' && (r.result === 'pass' || r.result === 'fail'));
+      const results = (body.results || []).filter(r => r && typeof r.skill_id === 'string' && ['pass', 'partial', 'fail'].includes(r.result));
       const existing = await one(env, 'SELECT * FROM eval_reports WHERE event_id=? AND student_id=? AND apparatus=?', id, student.id, app);
       const col = app + '_level', current = student[col];
       const fromLevel = existing ? existing.from_level : current;
       const rid = existing?.id || crypto.randomUUID();
       const st = [
-        env.DB.prepare("INSERT INTO eval_reports(id,event_id,student_id,apparatus,from_level,target_level,coach_id,outcome,notes,updated_at) VALUES(?,?,?,?,?,?,?,?,?,datetime('now')) ON CONFLICT(event_id,student_id,apparatus) DO UPDATE SET target_level=excluded.target_level,coach_id=excluded.coach_id,outcome=excluded.outcome,notes=excluded.notes,updated_at=excluded.updated_at")
-          .bind(rid, id, student.id, app, fromLevel, target, body.coach_id || null, outcome, str(body.notes, 2000)),
+        env.DB.prepare("INSERT INTO eval_reports(id,event_id,student_id,apparatus,from_level,target_level,coach_id,coach2_id,outcome,notes,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,datetime('now')) ON CONFLICT(event_id,student_id,apparatus) DO UPDATE SET target_level=excluded.target_level,coach_id=excluded.coach_id,coach2_id=excluded.coach2_id,outcome=excluded.outcome,notes=excluded.notes,updated_at=excluded.updated_at")
+          .bind(rid, id, student.id, app, fromLevel, target, body.coach_id, coach2, outcome, str(body.notes, 2000)),
         env.DB.prepare('DELETE FROM eval_results WHERE report_id=?').bind(rid),
         ...results.map(r => env.DB.prepare('INSERT OR IGNORE INTO eval_results(report_id,skill_id,result) SELECT ?,id,? FROM skills WHERE id=?').bind(rid, r.result, r.skill_id)),
-        env.DB.prepare('INSERT OR IGNORE INTO eval_participants(event_id,student_id,coach_id) VALUES(?,?,?)').bind(id, student.id, body.coach_id || null)
+        env.DB.prepare('INSERT OR IGNORE INTO eval_participants(event_id,student_id,coach_id,coach2_id) VALUES(?,?,?,?)').bind(id, student.id, body.coach_id, coach2)
       ];
       // Passing moves the student up to the evaluated level; un-passing puts them back where they started.
       let newLevel = current;
@@ -302,8 +321,27 @@ export async function handleFeatures(path, method, request, env, url, actor) {
       if (newLevel !== current) st.push(env.DB.prepare(`UPDATE students SET ${col}=? WHERE id=?`).bind(newLevel, student.id));
       // Skills they did in the evaluation count as mastered on the evaluation date.
       for (const r of results.filter(r => r.result === 'pass')) st.push(env.DB.prepare("INSERT INTO student_skill_progress(id,student_id,skill_id,status,started_date,mastered_date) SELECT ?,?,id,'mastered',?,? FROM skills WHERE id=? ON CONFLICT(student_id,skill_id) DO UPDATE SET status='mastered',started_date=COALESCE(student_skill_progress.started_date,excluded.started_date),mastered_date=COALESCE(student_skill_progress.mastered_date,excluded.mastered_date) WHERE student_skill_progress.status<>'mastered'").bind(crypto.randomUUID(), student.id, event.event_date, event.event_date, r.skill_id));
+      // Partly done skills count as being learned.
+      for (const r of results.filter(r => r.result === 'partial')) st.push(env.DB.prepare("INSERT INTO student_skill_progress(id,student_id,skill_id,status,started_date) SELECT ?,?,id,'learning',? FROM skills WHERE id=? ON CONFLICT(student_id,skill_id) DO UPDATE SET status='learning',started_date=COALESCE(student_skill_progress.started_date,excluded.started_date) WHERE student_skill_progress.status='not_started'").bind(crypto.randomUUID(), student.id, event.event_date, r.skill_id));
       await env.DB.batch(st);
-      return json({ ok: true, id: rid, from_level: fromLevel, level: newLevel, change: newLevel > fromLevel ? 'Increased' : 'Stayed the same' });
+      const change = newLevel > fromLevel ? 'Increased' : 'Stayed the same';
+      // Email the result to the parent right away (skipped when there is no parent email).
+      let emailed = 0;
+      if (body.email_parent !== false && mailConfigured(env)) {
+        const recips = await recipientsFor(env, { type: 'students', student_ids: [student.id] });
+        if (recips.length) {
+          const ids = results.map(r => r.skill_id);
+          const names = new Map(ids.length ? (await all(env, `SELECT id,name FROM skills WHERE id IN (${marks(ids)})`, ...ids)).map(x => [x.id, x.name]) : []);
+          const mark = { pass: '✓ Did it', partial: '◐ Partly', fail: '✗ Not yet' };
+          const coachName = (await one(env, 'SELECT name FROM coaches WHERE id=?', body.coach_id))?.name || '';
+          const lines = [`Here are ${student.first_name}'s results from “${event.title}” (${fmtDate(event.event_date)}) on ${app}, level ${target}.`,
+            outcome === 'passed' ? `${student.first_name} passed level ${target}${change === 'Increased' ? ` and moved up from level ${fromLevel}` : ''}. 🎉` : `${student.first_name} hasn't passed level ${target} yet and stays at level ${newLevel}. The skills below show what to work on next.`,
+            ...(results.length ? [results.map(r => `${mark[r.result]} — ${names.get(r.skill_id) || 'Skill'}`).join('\n')] : []),
+            ...(body.notes ? ['Coach notes: ' + str(body.notes, 2000)] : []), ...(coachName ? ['Evaluated by ' + coachName + '.'] : [])];
+          emailed = (await notify(env, recips, `${student.first_name}'s ${app} evaluation result`, lines)).sent || 0;
+        }
+      }
+      return json({ ok: true, id: rid, from_level: fromLevel, level: newLevel, change, emailed });
     }
     if (method === 'POST' && action === 'delete-report') {
       const r = await one(env, 'SELECT * FROM eval_reports WHERE id=? AND event_id=?', body?.report_id, id);
@@ -316,11 +354,11 @@ export async function handleFeatures(path, method, request, env, url, actor) {
     if (method === 'POST' && action === 'sheet') {
       const d = await evalData(env, id);
       const att = new Map(d.participants.map(p => [p.student_id, p]));
-      const summary = [['Student', 'Apparatus', 'Evaluated by', 'Level before', 'Level tried', 'Result', 'Level now', 'Change', 'Skills passed', 'Skills failed', 'Attendance', 'Notes']];
-      for (const r of d.reports) summary.push([r.first_name + ' ' + r.last_name, r.apparatus, r.coach_name || '', r.from_level ?? '', r.target_level, r.outcome === 'passed' ? 'Passed' : 'Not passed', r.current_level, changeLabel(r), r.results.filter(x => x.result === 'pass').length, r.results.filter(x => x.result === 'fail').length, att.get(r.student_id)?.status || '', r.notes || '']);
-      for (const p of d.participants) if (!d.reports.some(r => r.student_id === p.student_id)) summary.push([p.first_name + ' ' + p.last_name, '', p.coach_name || '', '', '', 'No report yet', '', '', '', '', p.status || '', '']);
+      const summary = [['Student', 'Apparatus', 'Evaluated by', 'Second evaluator', 'Level before', 'Level tried', 'Result', 'Level now', 'Change', 'Skills passed', 'Skills partly done', 'Skills failed', 'Attendance', 'Notes']];
+      for (const r of d.reports) summary.push([r.first_name + ' ' + r.last_name, r.apparatus, r.coach_name || '', r.coach2_name || '', r.from_level ?? '', r.target_level, r.outcome === 'passed' ? 'Passed' : 'Not passed', r.current_level, changeLabel(r), r.results.filter(x => x.result === 'pass').length, r.results.filter(x => x.result === 'partial').length, r.results.filter(x => x.result === 'fail').length, att.get(r.student_id)?.status || '', r.notes || '']);
+      for (const p of d.participants) if (!d.reports.some(r => r.student_id === p.student_id)) summary.push([p.first_name + ' ' + p.last_name, '', p.coach_name || '', p.coach2_name || '', '', '', 'No report yet', '', '', '', '', '', p.status || '', '']);
       const skills = [['Student', 'Apparatus', 'Level', 'Skill', 'Result']];
-      for (const r of d.reports) for (const x of r.results) skills.push([r.first_name + ' ' + r.last_name, r.apparatus, x.level, x.name, x.result === 'pass' ? 'Did it' : 'Failed']);
+      for (const r of d.reports) for (const x of r.results) skills.push([r.first_name + ' ' + r.last_name, r.apparatus, x.level, x.name, ({ pass: 'Did it', partial: 'Partly', fail: 'Failed' })[x.result]]);
       try {
         const sheet = await writeSpreadsheet(env, { sheetId: event.sheet_id, title: `MFU evaluation · ${event.title} · ${event.event_date}`, tabs: [{ name: 'Summary', rows: summary }, { name: 'Skills', rows: skills }] });
         await env.DB.prepare('UPDATE events SET sheet_id=?,sheet_url=? WHERE id=?').bind(sheet.id, sheet.url, id).run();
@@ -461,7 +499,8 @@ export async function handleFeatures(path, method, request, env, url, actor) {
     if (method === 'GET') {
       const rows = await all(env, 'SELECT r.*,p.name AS parent_name,p.email AS parent_email,s.first_name,s.last_name FROM parent_requests r JOIN parents p ON p.id=r.parent_id LEFT JOIN students s ON s.id=r.student_id ORDER BY (r.status=\'open\') DESC,r.created_at DESC LIMIT 300');
       const mine = actor.role === 'coach' ? new Set(await coachStudentIds(env, actor.id)) : null;
-      return json(rows.map(r => ({ ...r, mine: mine ? mine.has(r.student_id) : true })));
+      const files = await filesFor(env, rows.map(r => r.id));
+      return json(rows.map(r => ({ ...r, mine: mine ? mine.has(r.student_id) : true, files: files.filter(f => f.request_id === r.id) })));
     }
     if (id && method === 'POST' && action === 'reply') {
       const r = await one(env, 'SELECT r.*,p.name AS parent_name,p.email AS parent_email FROM parent_requests r JOIN parents p ON p.id=r.parent_id WHERE r.id=?', id);

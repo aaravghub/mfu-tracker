@@ -30,7 +30,7 @@
   /* ---- 2) liquid page transitions ---- */
   const disp = $('#mfu-disp'), content = $('#content');
   function warp() {
-    if (reduce || small() || !disp || !content) return;
+    if (reduce || small() || !disp || !content || document.documentElement.classList.contains('lite')) return;
     content.classList.add('warping');
     const t0 = performance.now(), dur = 650;
     (function tick(now) {
@@ -44,7 +44,7 @@
     // Never blocks rendering: fade the old page out, let the real show() run untouched, then animate the new page in.
     // eslint-disable-next-line no-global-assign
     show = async function (page) {
-      if (reduce || !content) return _show(page);
+      if (reduce || !content || document.documentElement.classList.contains('lite')) return _show(page);
       content.classList.remove('entering'); content.classList.add('leaving'); warp();
       const guard = setTimeout(() => content.classList.remove('leaving'), 1500);
       try { await Promise.all([_show(page), new Promise(r => setTimeout(r, 200))]); }
@@ -60,6 +60,7 @@
   const LIT = '.sidebar,header,.card,.stat,.timer-card,.table-wrap,.event-card,.login';
   let raf = 0, ev = null;
   document.addEventListener('pointermove', e => {
+    if (document.documentElement.classList.contains('lite')) return;
     ev = e; if (raf) return;
     raf = requestAnimationFrame(() => {
       raf = 0;

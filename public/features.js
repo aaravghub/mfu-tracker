@@ -22,25 +22,32 @@
     const a = document.createElement('a'); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url);
   };
   // Searchable checkbox list of students, optionally filtered by batch.
-  async function studentPicker(host, selected, { batches } = {}) {
-    const [students, bs] = await Promise.all([api('students'), batches ? Promise.resolve(batches) : api('meeting-contacts').then(x => x.batches)]);
-    const sel = new Set(selected);
-    host.innerHTML = `<div class="toolbar"><input data-ps placeholder="Search students..."><select data-pb style="max-width:220px"><option value="">Add a whole batch…</option>${bs.map(b => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('')}</select></div><div class="roster-list" data-pl>${students.filter(s => s.active !== 0).map(s => `<label class="roster-person" data-n="${esc(nameOf(s).toLowerCase())}"><input type="checkbox" value="${esc(s.id)}" ${sel.has(s.id) ? 'checked' : ''}><span><b>${esc(nameOf(s))}</b><small>${esc(s.center_id || '')} · P${s.pole_level} R${s.rope_level} Y${s.yoga_level}</small></span></label>`).join('')}</div>`;
-    host.querySelector('[data-ps]').oninput = e => host.querySelectorAll('[data-pl] label').forEach(l => l.style.display = l.dataset.n.includes(e.target.value.toLowerCase()) ? '' : 'none');
-    host.querySelector('[data-pb]').onchange = e => { const b = bs.find(x => x.id === e.target.value); if (b) b.student_ids.forEach(id => { const i = host.querySelector(`[data-pl] input[value="${CSS.escape(id)}"]`); if (i) i.checked = true; }); e.target.value = ''; };
+  // Searchable checkbox list of students with center and level filters; "Add a whole batch" ticks a batch's kids.
+  async function studentPicker(host, selected, { batches, filters = true } = {}) {
+    const [students, bs, centers] = await Promise.all([api('students'), batches ? Promise.resolve(batches) : api('meeting-contacts').then(x => x.batches), api('centers')]);
+    const sel = new Set(selected), cn = id => centers.find(c => c.id === id)?.name || id || '';
+    host.innerHTML = `<div class="toolbar"><input data-ps type="search" placeholder="Search students..."><select data-pb style="max-width:220px"><option value="">Add a whole batch…</option>${bs.map(b => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('')}</select>${filters ? `<select data-pc style="max-width:180px"><option value="">All centers</option>${centers.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select><select data-pv style="max-width:200px"><option value="">Any level</option>${APPS.flatMap(a => [1, 2, 3, 4, 5].map(n => `<option value="${a}:${n}">${cap(a)} Level ${n}</option>`)).join('')}</select><button type="button" class="btn secondary small" data-pall>Tick all shown</button>` : ''}</div><div class="roster-list" data-pl>${students.filter(s => s.active !== 0).map(s => `<label class="roster-person" data-n="${esc(nameOf(s).toLowerCase())}" data-c="${esc(s.center_id || '')}" data-pole="${s.pole_level}" data-rope="${s.rope_level}" data-yoga="${s.yoga_level}"><input type="checkbox" value="${esc(s.id)}" ${sel.has(s.id) ? 'checked' : ''}><span><b>${esc(nameOf(s))}</b><small>${esc(cn(s.center_id))} · Pole L${s.pole_level} · Rope L${s.rope_level} · Yoga L${s.yoga_level}</small></span></label>`).join('')}</div>`;
+    const q = k => host.querySelector(k);
+    const apply = () => { const t = q('[data-ps]').value.toLowerCase(), c = q('[data-pc]')?.value, [a, n] = (q('[data-pv]')?.value || ':').split(':');
+      host.querySelectorAll('[data-pl] label').forEach(l => l.style.display = l.dataset.n.includes(t) && (!c || l.dataset.c === c) && (!a || l.dataset[a] === n) ? '' : 'none'); };
+    q('[data-ps]').oninput = apply; q('[data-pc]') && (q('[data-pc]').onchange = apply); q('[data-pv]') && (q('[data-pv]').onchange = apply);
+    q('[data-pall]') && (q('[data-pall]').onclick = () => { host.querySelectorAll('[data-pl] label').forEach(l => { if (l.style.display !== 'none') l.querySelector('input').checked = true; }); host.dispatchEvent(new Event('change', { bubbles: true })); });
+    q('[data-pb]').onchange = e => { const b = bs.find(x => x.id === e.target.value); if (b) b.student_ids.forEach(id => { const i = host.querySelector(`[data-pl] input[value="${CSS.escape(id)}"]`); if (i) i.checked = true; }); e.target.value = ''; host.dispatchEvent(new Event('change', { bubbles: true })); };
     return { students, ids: () => [...host.querySelectorAll('[data-pl] input:checked')].map(i => i.value) };
   }
 
+  window.mfuStudentPicker = studentPicker;
+
   /* ---------- navigation ---------- */
   const EVENTS_NAV = ['Events', [['calendar', 'Calendar & meetings'], ['evaluations', 'Evaluations'], ['competitions', 'Competition scores'], ['demos', 'Demos'], ['events', 'Event list']]];
-  const MANAGE = [['overview', 'Overview'], ['students', 'Students'], ['batches', 'Batches'], ['coaches', 'Coaches'], ['centers', 'Centers'], ['attendance', 'Attendance'], ['fitness', 'Fitness'], ['skills', 'Skill library'], ['routines', 'Routines']];
+  const MANAGE = [['overview', 'Overview'], ['students', 'Students'], ['batches', 'Batches'], ['coaches', 'Coaches'], ['centers', 'Centers'], ['attendance', 'Attendance'], ['fitness', 'Fitness'], ['exercises', 'Exercises & sets'], ['skills', 'Skill library'], ['routines', 'Routines']];
   NAV.admin = [['Manage', MANAGE], EVENTS_NAV,
     ['Families', [['parents', 'Parents'], ['requests', 'Parent requests'], ['announcements', 'Announcements'], ['links', 'Links & forms'], ['shop', 'Shop'], ['email', 'Email parents']]],
     ['Tools', [['assistant', 'Skill assistant'], ['coach_accounts', 'Coach accounts'], ['timers', 'Timers']]]];
   NAV.coach = [['Me', [['coach_home', 'My dashboard'], ['requests', 'Parent requests'], ['announcements', 'Announcements']]], ['Manage', MANAGE.filter(([p]) => p !== 'overview')], EVENTS_NAV,
     ['Families', [['links', 'Links & forms'], ['shop', 'Shop'], ['email', 'Email parents']]],
     ['Tools', [['assistant', 'Skill assistant'], ['timers', 'Timers'], ['c_account', 'Account']]]];
-  NAV.parent = [['', [['home', 'My children'], ['p_announcements', 'Announcements'], ['p_events', 'Events'], ['p_contact', 'Contact coach'], ['p_links', 'Forms & links'], ['p_shop', 'Shop'], ['account', 'Account']]]];
+  NAV.parent = [['', [['home', 'My children'], ['p_skills', 'Skills'], ['p_practice', 'Home practice'], ['p_announcements', 'Announcements'], ['p_events', 'Events'], ['p_contact', 'Contact coach'], ['p_links', 'Forms & links'], ['p_shop', 'Shop'], ['account', 'Account']]]];
   Object.assign(titles, { student: 'Student', centers: 'Centers', coach_home: 'My dashboard', calendar: 'Calendar & meetings', evaluations: 'Evaluations', competitions: 'Competition scores', demos: 'Demos', requests: 'Parent requests', announcements: 'Announcements', assistant: 'Skill assistant', coach_accounts: 'Coach accounts', fitness: 'Fitness', c_account: 'Account', p_announcements: 'Announcements', p_contact: 'Contact coach', events: 'Event list' });
 
   /* ---------- admin overview: add requests, demos and meetings ---------- */
@@ -189,7 +196,7 @@
   async function demoModal(d, centers) {
     const m = openModal(d ? 'Edit demo' : 'Add demo', `<form id="df"><div class="form-grid"><label class="wide">Demo name<input name="title" required value="${esc(d?.title || '')}" placeholder="e.g. Diwali festival demo"></label><label>Date<input type="date" name="demo_date" required value="${esc(d?.demo_date || '')}"></label><label>Center<select name="center_id"><option value="">Any / all</option>${centers.map(c => `<option value="${esc(c.id)}" ${d?.center_id === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label><label>Kids arrive by<input type="time" name="arrive_time" value="${esc(d?.arrive_time || '')}"></label><label>Location / address<input name="location" value="${esc(d?.location || '')}"></label><label>Demo starts<input type="time" name="start_time" value="${esc(d?.start_time || '')}"></label><label>Demo ends<input type="time" name="end_time" value="${esc(d?.end_time || '')}"></label><label class="wide">Details for parents (what to wear, what to bring)<textarea name="details" rows="3">${esc(d?.details || '')}</textarea></label></div><h4>Kids going</h4><div id="dkids"></div><div class="modal-actions"><button type="button" class="btn secondary" data-close>Cancel</button><button class="btn">Save demo</button></div></form>`, { wide: true });
     const picker = await studentPicker(m.$('#dkids'), (d?.students || []).map(s => s.student_id));
-    m.$('#df').onsubmit = async e => { e.preventDefault(); const body = Object.fromEntries(new FormData(e.target)); body.student_ids = picker.ids(); try { await api('demos' + (d ? '/' + d.id : ''), { method: d ? 'PUT' : 'POST', body: JSON.stringify(body) }); toast('Demo saved'); m.close(); show('demos'); } catch (err) { toast(err.message); } };
+    m.$('#df').onsubmit = async e => { e.preventDefault(); const body = Object.fromEntries(new FormData(e.target)), now = picker.ids(), before = (d?.students || []).map(s => s.student_id); body.add_student_ids = now.filter(x => !before.includes(x)); body.remove_student_ids = before.filter(x => !now.includes(x)); try { await api('demos' + (d ? '/' + d.id : ''), { method: d ? 'PUT' : 'POST', body: JSON.stringify(body) }); toast('Demo saved'); m.close(); show('demos'); } catch (err) { toast(err.message); } };
   }
 
   /* ---------- evaluations ---------- */
@@ -209,53 +216,81 @@
     const V = $('#evview');
 
     if (tab === 'students') {
-      V.innerHTML = `<div class="card"><h3>Who is being evaluated</h3><p class="muted">Tick the students, then choose which coach evaluates each one. Coaches see their assignments on their dashboard.</p><div id="evpick"></div><div class="modal-actions"><button class="btn" id="evnext">Next: assign evaluators</button></div></div><div class="card section-gap" id="evassign"></div>`;
-      const picker = await studentPicker($('#evpick'), d.participants.map(p => p.student_id));
-      const cur = new Map(d.participants.map(p => [p.student_id, p.coach_id]));
+      V.innerHTML = `<div class="card"><h3>Who is being evaluated</h3><p class="muted">Tick the students to add. Saving only adds the kids you ticked and removes the ones you unticked, so people adding kids on other laptops at the same time won't overwrite each other.</p><div id="evpick"></div><div class="modal-actions"><button class="btn" id="evnext">Next: assign evaluators ↓</button></div></div><div class="card section-gap" id="evassign"></div>`;
+      const startIds = new Set(d.participants.map(p => p.student_id));
+      const picker = await studentPicker($('#evpick'), [...startIds], { filters: true });
+      const cur = new Map(d.participants.map(p => [p.student_id, { c1: p.coach_id || '', c2: p.coach2_id || '' }]));
       const drawAssign = () => {
-        $$('[data-evc]').forEach(s => cur.set(s.dataset.evc, s.value));
+        $$('[data-evc]').forEach(s => { const v = cur.get(s.dataset.evc) || {}; v[s.dataset.slot] = s.value; cur.set(s.dataset.evc, v); });
         const ids = picker.ids();
-        $('#evassign').innerHTML = `<h3>Evaluators</h3>${ids.length ? `<div class="toolbar"><select id="evbulk" style="max-width:260px">${coachOpts('')}</select><button class="btn secondary small" id="evbulkgo">Set for everyone</button></div><div class="table-wrap"><table><tbody>${ids.map(id => { const s = picker.students.find(x => x.id === id); return `<tr><td><b>${esc(nameOf(s))}</b><br><small class="muted">Pole ${s.pole_level} · Rope ${s.rope_level} · Yoga ${s.yoga_level}</small></td><td><select data-evc="${esc(id)}">${coachOpts(cur.get(id) || (isCoach() ? state.me.coach_id : ''))}</select></td></tr>`; }).join('')}</tbody></table></div>` : '<p class="muted">No students picked yet.</p>'}<div class="modal-actions"><button class="btn" id="evsavep">Save students & evaluators</button></div>`;
-        $('#evbulkgo') && ($('#evbulkgo').onclick = () => $$('[data-evc]').forEach(s => s.value = $('#evbulk').value));
-        $('#evsavep').onclick = async () => { try { const participants = picker.ids().map(id => ({ student_id: id, coach_id: $(`[data-evc="${CSS.escape(id)}"]`)?.value || null })); await api('evaluations/' + state.evalId + '/participants', { method: 'POST', body: JSON.stringify({ participants }) }); toast('Saved ' + participants.length + ' students'); show('evaluations'); } catch (e) { toast(e.message); } };
+        $('#evassign').innerHTML = `<h3>Evaluators</h3><p class="muted">Every student needs an evaluator. A second evaluator is optional.</p>${ids.length ? `<div class="toolbar"><select id="evbulk" style="max-width:220px">${coachOpts('')}</select><button class="btn secondary small" id="evbulkgo">Set evaluator for everyone</button><select id="evbulk2" style="max-width:220px">${coachOpts('').replace('Not assigned', 'No second evaluator')}</select><button class="btn secondary small" id="evbulkgo2">Set second evaluator for everyone</button></div><div class="table-wrap"><table><thead><tr><th>Student</th><th>Evaluator</th><th>Second evaluator</th></tr></thead><tbody>${ids.map(id => { const s = picker.students.find(x => x.id === id), v = cur.get(id) || {}; return `<tr><td><b>${esc(nameOf(s))}</b><br><small class="muted">Pole L${s.pole_level} · Rope L${s.rope_level} · Yoga L${s.yoga_level}</small></td><td><select data-evc="${esc(id)}" data-slot="c1">${coachOpts(v.c1 || (isCoach() ? state.me.coach_id : ''))}</select></td><td><select data-evc="${esc(id)}" data-slot="c2">${coachOpts(v.c2 || '').replace('Not assigned', 'None')}</select></td></tr>`; }).join('')}</tbody></table></div>` : '<p class="muted">No students picked yet.</p>'}<p class="error" id="everr"></p><div class="modal-actions"><button class="btn" id="evsavep">Save students & evaluators</button></div>`;
+        $('#evbulkgo') && ($('#evbulkgo').onclick = () => $$('[data-slot="c1"]').forEach(s => s.value = $('#evbulk').value));
+        $('#evbulkgo2') && ($('#evbulkgo2').onclick = () => $$('[data-slot="c2"]').forEach(s => s.value = $('#evbulk2').value));
+        $('#evsavep').onclick = async () => {
+          const ids = picker.ids(), sel = (id, slot) => $(`[data-evc="${CSS.escape(id)}"][data-slot="${slot}"]`);
+          const missing = ids.filter(id => !sel(id, 'c1')?.value);
+          $$('[data-slot="c1"]').forEach(s => s.classList.toggle('invalid', !s.value));
+          if (missing.length) { $('#everr').textContent = `Choose an evaluator for ${missing.length === 1 ? nameOf(picker.students.find(x => x.id === missing[0])) : missing.length + ' students'} before saving.`; sel(missing[0], 'c1')?.focus(); return; }
+          $('#everr').textContent = '';
+          try {
+            const participants = ids.map(id => ({ student_id: id, coach_id: sel(id, 'c1').value, coach2_id: sel(id, 'c2').value || null }));
+            const remove = [...startIds].filter(id => !ids.includes(id));
+            const r = await api('evaluations/' + state.evalId + '/participants', { method: 'POST', body: JSON.stringify({ participants, remove }) });
+            toast(`Saved ${r.added} student${r.added === 1 ? '' : 's'}${r.removed ? ' · removed ' + r.removed : ''}`); show('evaluations');
+          } catch (e) { toast(e.message); }
+        };
       };
-      $('#evnext').onclick = drawAssign; $('#evpick').addEventListener('change', e => { if (e.target.type === 'checkbox') drawAssign(); }); drawAssign();
+      $('#evnext').onclick = () => { drawAssign(); $('#evassign').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+      $('#evpick').addEventListener('change', e => { if (e.target.type === 'checkbox') drawAssign(); }); drawAssign();
     }
 
     if (tab === 'attendance') {
-      V.innerHTML = d.participants.length ? `<div class="card"><h3>Evaluation attendance</h3><div class="table-wrap"><table><thead><tr><th>Student</th><th>Evaluator</th><th>Status</th></tr></thead><tbody>${d.participants.map(p => `<tr><td><b>${esc(p.first_name + ' ' + p.last_name)}</b></td><td>${esc(p.coach_name || '—')}</td><td>${statusSelect(`data-es="${esc(p.student_id)}"`, p.status)}</td></tr>`).join('')}</tbody></table></div><div class="modal-actions"><button class="btn secondary" id="eall">All present</button><button class="btn" id="esave">Save attendance</button></div></div>` : `<div class="card">${empty('📝', 'Nobody added yet', 'Add students on the “Students & evaluators” tab first.')}</div>`;
+      V.innerHTML = d.participants.length ? `<div class="card"><h3>Evaluation attendance</h3><div class="table-wrap"><table><thead><tr><th>Student</th><th>Evaluator</th><th>Status</th></tr></thead><tbody>${d.participants.map(p => `<tr><td><b>${esc(p.first_name + ' ' + p.last_name)}</b></td><td>${esc([p.coach_name, p.coach2_name].filter(Boolean).join(' + ') || '—')}</td><td>${statusSelect(`data-es="${esc(p.student_id)}"`, p.status)}</td></tr>`).join('')}</tbody></table></div><div class="modal-actions"><button class="btn secondary" id="eall">All present</button><button class="btn" id="esave">Save attendance</button></div></div>` : `<div class="card">${empty('📝', 'Nobody added yet', 'Add students on the “Students & evaluators” tab first.')}</div>`;
       $('#eall') && ($('#eall').onclick = () => $$('[data-es]').forEach(s => s.value = 'present'));
       $('#esave') && ($('#esave').onclick = async () => { try { await api('evaluations/' + state.evalId + '/attendance', { method: 'POST', body: JSON.stringify({ records: $$('[data-es]').map(s => ({ student_id: s.dataset.es, status: s.value })) }) }); toast('Attendance saved'); } catch (e) { toast(e.message); } });
     }
 
     if (tab === 'evaluate') {
-      const students = await api('students');
-      const pool = d.participants.length ? d.participants.map(p => ({ ...students.find(s => s.id === p.student_id), coach_id: p.coach_id })).filter(s => s.id) : students.filter(s => s.active !== 0);
-      const S = state.evalForm ||= {};
+      const [students, centers] = await Promise.all([api('students'), api('centers')]);
+      const everyone = d.participants.length ? d.participants.map(p => ({ ...students.find(s => s.id === p.student_id), coach_id: p.coach_id, coach2_id: p.coach2_id })).filter(s => s.id) : students.filter(s => s.active !== 0);
+      const S = state.evalForm ||= { email: true };
+      S.app ||= 'pole';
+      // Filters: name search, center, and the level they are at now on the chosen apparatus.
+      const pool = everyone.filter(s => (!S.q || nameOf(s).toLowerCase().includes(S.q.toLowerCase())) && (!S.center || s.center_id === S.center) && (!S.lvl || levelOf(s, S.app) === Number(S.lvl)) && (!S.mine || s.coach_id === state.me?.coach_id || s.coach2_id === state.me?.coach_id));
+      const filters = `<div class="toolbar ev-filters"><input id="evq" type="search" placeholder="Search students…" value="${esc(S.q || '')}"><select id="evcen"><option value="">All centers</option>${centers.map(c => `<option value="${esc(c.id)}" ${S.center === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select><select id="evlf"><option value="">Any ${S.app} level</option>${[1, 2, 3, 4, 5].map(n => `<option value="${n}" ${Number(S.lvl) === n ? 'selected' : ''}>Now at ${cap(S.app)} Level ${n}</option>`).join('')}</select>${isCoach() ? `<label class="check"><input type="checkbox" id="evmine" ${S.mine ? 'checked' : ''}> Only mine</label>` : ''}<span class="muted">${pool.length} of ${everyone.length} students</span></div>`;
       if (!pool.some(s => s.id === S.student)) S.student = (isCoach() && pool.find(s => s.coach_id === state.me.coach_id) || pool[0])?.id;
       const stu = pool.find(s => s.id === S.student);
-      if (!stu) { V.innerHTML = `<div class="card">${empty('🧒', 'No students', 'Add students first.')}</div>`; return; }
-      S.app ||= 'pole';
+      const wireFilters = () => {
+        const re = patch => { Object.assign(S, patch); show('evaluations'); };
+        let t; $('#evq').oninput = e => { clearTimeout(t); t = setTimeout(() => { re({ q: e.target.value }); setTimeout(() => { const i = $('#evq'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 50); }, 350); };
+        $('#evcen').onchange = e => re({ center: e.target.value }); $('#evlf').onchange = e => re({ lvl: e.target.value });
+        $('#evmine') && ($('#evmine').onchange = e => re({ mine: e.target.checked }));
+      };
+      if (!stu) { V.innerHTML = filters + `<div class="card">${empty('🧒', 'No students match', 'Change the search or filters above.')}</div>`; wireFilters(); return; }
       const existing = d.reports.find(r => r.student_id === stu.id && r.apparatus === S.app);
       const from = existing?.from_level ?? levelOf(stu, S.app);
-      if (!S.level || S.levelFor !== stu.id + S.app) { S.level = existing?.target_level || Math.min(5, levelOf(stu, S.app) + (levelOf(stu, S.app) < 5 ? 1 : 0)); S.levelFor = stu.id + S.app; }
+      if (!S.level || S.levelFor !== stu.id + S.app) { S.level = existing?.target_level || Math.min(5, levelOf(stu, S.app) + 1); S.levelFor = stu.id + S.app; }
       const list = skills.filter(s => s.apparatus === S.app && Number(s.level) === Number(S.level) && s.active !== 0).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.name.localeCompare(b.name));
       const marks = new Map((existing?.target_level === S.level ? existing.results : []).map(r => [r.skill_id, r.result]));
       let outcome = existing && existing.target_level === S.level ? existing.outcome : null, outcomeTouched = !!outcome;
-      const myPool = isCoach() ? pool.filter(s => s.coach_id === state.me.coach_id) : [];
-      V.innerHTML = `<div class="card"><div class="form-grid"><label>Student<select id="evstu">${(myPool.length ? [['Assigned to me', myPool], ['Everyone else', pool.filter(s => !myPool.includes(s))]] : [['', pool]]).map(([g, ps]) => ps.length ? (g ? `<optgroup label="${g}">` : '') + ps.map(s => { const done = d.reports.filter(r => r.student_id === s.id).length; return `<option value="${esc(s.id)}" ${s.id === stu.id ? 'selected' : ''}>${esc(nameOf(s))}${done ? ' ✓' : ''}</option>`; }).join('') + (g ? '</optgroup>' : '') : '').join('')}</select></label>
-        <label>Evaluator<select id="evcoach">${coachOpts(existing?.coach_id || stu.coach_id || (isCoach() ? state.me.coach_id : ''))}</select></label>
-        <label>Apparatus<select id="evapp">${APPS.map(a => `<option value="${a}" ${a === S.app ? 'selected' : ''}>${cap(a)} (now level ${levelOf(stu, a)})</option>`).join('')}</select></label>
+      const idx = pool.findIndex(s => s.id === stu.id);
+      V.innerHTML = filters + `<div class="card" id="evcard"><div class="ev-nav"><button class="btn secondary small" id="evprev" ${pool.length < 2 ? 'disabled' : ''}>← Previous student</button><b>${esc(nameOf(stu))}</b><span class="muted">${idx + 1} of ${pool.length}</span></div>
+        <div class="form-grid"><label>Student<select id="evstu">${pool.map(s => { const done = d.reports.filter(r => r.student_id === s.id).length; return `<option value="${esc(s.id)}" ${s.id === stu.id ? 'selected' : ''}>${esc(nameOf(s))}${done ? ' ✓' : ''}</option>`; }).join('')}</select></label>
+        <label>Apparatus<select id="evapp">${APPS.map(a => `<option value="${a}" ${a === S.app ? 'selected' : ''}>${cap(a)} (now Level ${levelOf(stu, a)})</option>`).join('')}</select></label>
+        <label><span>Evaluator <span class="req">*</span></span><select id="evcoach" required>${coachOpts(existing?.coach_id || stu.coach_id || (isCoach() ? state.me.coach_id : ''))}</select></label>
+        <label>Second evaluator<select id="evcoach2">${coachOpts(existing?.coach2_id || stu.coach2_id || '').replace('Not assigned', 'None')}</select></label>
         <label>Level they're going for<select id="evlvl">${[1, 2, 3, 4, 5].map(n => `<option value="${n}" ${n === Number(S.level) ? 'selected' : ''}>Level ${n}</option>`).join('')}</select></label></div>
-        <p class="muted section-gap-sm">${esc(nameOf(stu))} is level ${from} on ${S.app}${existing ? ' when this evaluation started' : ''}. Tap ✓ if they did the skill or ✗ if they didn't.</p>
+        <p class="muted section-gap-sm">${esc(nameOf(stu))} is Level ${from} on ${S.app}${existing ? ' when this evaluation started' : ''}. Tap ✓ if they did the skill, ◐ if they partly did it, or ✗ if they didn't.</p>
         <div class="toolbar"><button class="btn secondary small" id="allpass">Mark all ✓</button><button class="btn secondary small" id="allclear">Clear</button><span class="muted" id="evcount"></span></div>
-        <div class="eval-list">${list.length ? list.map(s => `<div class="eval-row" data-sk="${esc(s.id)}"><span>${esc(s.name)}${s.description ? `<small class="muted"> · ${esc(s.description)}</small>` : ''}</span><span class="eval-btns"><button type="button" class="eval-btn pass" data-r="pass" aria-label="Did it">✓ Did it</button><button type="button" class="eval-btn fail" data-r="fail" aria-label="Failed">✗ Failed</button></span></div>`).join('') : empty('📚', 'No skills at this level', 'Add or import ' + S.app + ' level ' + S.level + ' skills in the Skill library.')}</div>
-        <div class="form-grid section-gap"><label>Result<select id="evout"><option value="passed">Passed level ${S.level}</option><option value="not_passed">Not passed yet</option></select></label><label>Notes (optional)<input id="evnotes" value="${esc(existing?.notes || '')}" placeholder="e.g. strong mount, work on balance"></label></div>
-        <div class="modal-actions">${existing ? '<button class="btn secondary" id="evdel">Delete this report</button>' : ''}<button class="btn secondary" id="evsave">Save</button><button class="btn" id="evnextstu">Save & next student</button></div></div>`;
+        <div class="eval-list">${list.length ? list.map(s => `<div class="eval-row" data-sk="${esc(s.id)}"><span>${esc(s.name)}${s.description ? `<small class="muted"> · ${esc(s.description)}</small>` : ''}</span><span class="eval-btns"><button type="button" class="eval-btn pass" data-r="pass">✓ Did it</button><button type="button" class="eval-btn partial" data-r="partial">◐ Partly</button><button type="button" class="eval-btn fail" data-r="fail">✗ Failed</button></span></div>`).join('') : empty('📚', 'No skills at this level', 'Add or import ' + S.app + ' level ' + S.level + ' skills in the Skill library.')}</div>
+        <div class="form-grid section-gap"><label>Result<select id="evout"><option value="passed">Passed level ${S.level}</option><option value="not_passed">Not passed yet</option></select></label><label>Notes (optional)<input id="evnotes" value="${esc(existing?.notes || '')}" placeholder="e.g. strong mount, work on balance"></label><label class="check wide"><input type="checkbox" id="evmail" ${S.email !== false ? 'checked' : ''}> Email this result to the parent (skipped if there's no parent email)</label></div>
+        <p class="error" id="everr2"></p>
+        <div class="modal-actions">${existing ? '<button class="btn secondary" id="evdel">Delete this report</button>' : ''}<button class="btn secondary" id="evsave">Save</button><button class="btn" id="evnextstu">Save & next student →</button></div></div>`;
+      wireFilters();
       const paint = () => {
-        $$('.eval-row').forEach(r => { const v = marks.get(r.dataset.sk); r.classList.toggle('is-pass', v === 'pass'); r.classList.toggle('is-fail', v === 'fail'); });
-        const p = [...marks.values()].filter(v => v === 'pass').length, f = [...marks.values()].filter(v => v === 'fail').length;
-        $('#evcount').textContent = `${p} did it · ${f} failed · ${list.length - p - f} not marked`;
+        $$('.eval-row').forEach(r => { const v = marks.get(r.dataset.sk); r.classList.toggle('is-pass', v === 'pass'); r.classList.toggle('is-partial', v === 'partial'); r.classList.toggle('is-fail', v === 'fail'); });
+        const n = k => [...marks.values()].filter(v => v === k).length, p = n('pass');
+        $('#evcount').textContent = `${p} did it · ${n('partial')} partly · ${n('fail')} failed · ${list.length - marks.size} not marked`;
         if (!outcomeTouched) outcome = list.length && p === list.length ? 'passed' : 'not_passed';
         $('#evout').value = outcome;
       };
@@ -263,16 +298,19 @@
       $('#allpass').onclick = () => { list.forEach(s => marks.set(s.id, 'pass')); paint(); };
       $('#allclear').onclick = () => { marks.clear(); outcomeTouched = false; paint(); };
       $('#evout').onchange = e => { outcome = e.target.value; outcomeTouched = true; };
-      $('#evstu').onchange = e => { S.student = e.target.value; S.levelFor = null; show('evaluations'); };
-      $('#evapp').onchange = e => { S.app = e.target.value; S.levelFor = null; show('evaluations'); };
+      $('#evmail').onchange = e => { S.email = e.target.checked; };
+      const goTo = (id, scroll = true) => { S.student = id; S.levelFor = null; show('evaluations').then(() => scroll && $('#evcard')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); };
+      $('#evstu').onchange = e => goTo(e.target.value, false);
+      $('#evprev').onclick = () => goTo(pool[(idx - 1 + pool.length) % pool.length].id);
+      $('#evapp').onchange = e => { S.app = e.target.value; S.levelFor = null; S.lvl = ''; show('evaluations'); };
       $('#evlvl').onchange = e => { S.level = Number(e.target.value); show('evaluations'); };
       paint();
       const save = async next => {
+        if (!$('#evcoach').value) { $('#everr2').textContent = 'Choose an evaluator for ' + nameOf(stu) + ' before saving.'; $('#evcoach').classList.add('invalid'); $('#evcoach').focus(); return; }
         try {
-          const r = await api('evaluations/' + state.evalId + '/report', { method: 'POST', body: JSON.stringify({ student_id: stu.id, apparatus: S.app, target_level: Number(S.level), coach_id: $('#evcoach').value || null, outcome: $('#evout').value, notes: $('#evnotes').value, results: [...marks].map(([skill_id, result]) => ({ skill_id, result })) }) });
-          toast(`${nameOf(stu)} · ${cap(S.app)}: ${r.change === 'Increased' ? 'level ' + r.from_level + ' → ' + r.level : 'stayed at level ' + r.level}`);
-          if (next) { const i = pool.findIndex(s => s.id === stu.id); S.student = pool[(i + 1) % pool.length].id; S.levelFor = null; }
-          show('evaluations');
+          const r = await api('evaluations/' + state.evalId + '/report', { method: 'POST', body: JSON.stringify({ student_id: stu.id, apparatus: S.app, target_level: Number(S.level), coach_id: $('#evcoach').value, coach2_id: $('#evcoach2').value || null, outcome: $('#evout').value, notes: $('#evnotes').value, email_parent: $('#evmail').checked, results: [...marks].map(([skill_id, result]) => ({ skill_id, result })) }) });
+          toast(`${nameOf(stu)} · ${cap(S.app)}: ${r.change === 'Increased' ? 'Level ' + r.from_level + ' → ' + r.level : 'stayed at Level ' + r.level}${r.emailed ? ' · emailed to parent' : ''}`);
+          if (next) goTo(pool[(idx + 1) % pool.length].id); else show('evaluations');
         } catch (e) { toast(e.message); }
       };
       $('#evsave').onclick = () => save(false); $('#evnextstu').onclick = () => save(true);
@@ -286,7 +324,7 @@
       const up = [...byStu.values()].filter(s => s.rows.some(r => r.outcome === 'passed' && r.target_level > (r.from_level ?? 0))).length;
       V.innerHTML = `<div class="stats">${[['Evaluated', [...byStu.values()].filter(s => s.rows.length).length], ['Moved up a level', up], ['Stayed the same', [...byStu.values()].filter(s => s.rows.length && !s.rows.some(r => r.outcome === 'passed' && r.target_level > (r.from_level ?? 0))).length], ['Not evaluated yet', [...byStu.values()].filter(s => !s.rows.length).length]].map(x => `<div class="stat"><span>${x[0]}</span><strong>${x[1]}</strong></div>`).join('')}</div>
         <div class="card"><div class="toolbar"><button class="btn" id="tosheet">${d.event.sheet_url ? 'Update Google Sheet' : 'Save to Google Sheet'}</button><button class="btn secondary" id="tocsv">Download CSV</button><span class="muted" id="sheetmsg">${d.event.sheet_url ? 'Saved to ' + link(d.event.sheet_url, 'this sheet ↗', '') : ''}</span></div>
-        ${byStu.size ? [...byStu.entries()].map(([sid, s]) => `<div class="sum-row"><b>${esc(s.name)}</b>${s.rows.length ? s.rows.map(r => { const inc = r.outcome === 'passed' && r.target_level > (r.from_level ?? 0); const p = r.results.filter(x => x.result === 'pass').length; return `<div class="sum-line"><span class="chip">${cap(r.apparatus)}</span><span>Level ${r.from_level ?? '?'} → ${inc ? r.target_level : r.from_level ?? r.current_level}</span><span class="chip ${inc ? 'ok' : ''}">${inc ? '▲ Increased' : '= Stayed the same'}</span><small class="muted">${p}/${r.results.length} skills · tried level ${r.target_level}${r.coach_name ? ' · by ' + esc(r.coach_name) : ''}${r.notes ? ' · ' + esc(r.notes) : ''}</small></div>`; }).join('') : `<div class="sum-line"><span class="chip warn">Not evaluated yet</span>${s.status ? `<small class="muted">attendance: ${esc(s.status)}</small>` : ''}</div>`}</div>`).join('') : empty('📝', 'Nothing to summarize yet', 'Evaluate students on the Evaluate tab.')}</div>`;
+        ${byStu.size ? [...byStu.entries()].map(([sid, s]) => `<div class="sum-row"><b>${esc(s.name)}</b>${s.rows.length ? s.rows.map(r => { const inc = r.outcome === 'passed' && r.target_level > (r.from_level ?? 0); const p = r.results.filter(x => x.result === 'pass').length, pp = r.results.filter(x => x.result === 'partial').length; return `<div class="sum-line"><span class="chip">${cap(r.apparatus)}</span><span>Level ${r.from_level ?? '?'} → ${inc ? r.target_level : r.from_level ?? r.current_level}</span><span class="chip ${inc ? 'ok' : ''}">${inc ? '▲ Increased' : '= Stayed the same'}</span><small class="muted">${p}/${r.results.length} skills done${pp ? ', ' + pp + ' partly' : ''} · tried Level ${r.target_level}${r.coach_name ? ' · by ' + esc([r.coach_name, r.coach2_name].filter(Boolean).join(' + ')) : ''}${r.notes ? ' · ' + esc(r.notes) : ''}</small></div>`; }).join('') : `<div class="sum-line"><span class="chip warn">Not evaluated yet</span>${s.status ? `<small class="muted">attendance: ${esc(s.status)}</small>` : ''}</div>`}</div>`).join('') : empty('📝', 'Nothing to summarize yet', 'Evaluate students on the Evaluate tab.')}</div>`;
       $('#tosheet').onclick = async () => { const b = $('#tosheet'); b.disabled = true; b.textContent = 'Saving…'; try { const r = await api('evaluations/' + state.evalId + '/sheet', { method: 'POST', body: '{}' }); $('#sheetmsg').innerHTML = 'Saved to ' + link(r.url, 'this sheet ↗', ''); toast('Saved to Google Sheets'); window.open(r.url, '_blank', 'noopener'); } catch (e) { toast(e.message); $('#sheetmsg').textContent = e.message; } b.disabled = false; b.textContent = 'Update Google Sheet'; };
       $('#tocsv').onclick = () => csvDownload('evaluation-' + d.event.event_date + '.csv', [['Student', 'Apparatus', 'Evaluated by', 'Level before', 'Level tried', 'Result', 'Change', 'Skills passed', 'Skills failed', 'Notes'], ...d.reports.map(r => [r.first_name + ' ' + r.last_name, r.apparatus, r.coach_name || '', r.from_level ?? '', r.target_level, r.outcome === 'passed' ? 'Passed' : 'Not passed', r.outcome === 'passed' && r.target_level > (r.from_level ?? 0) ? 'Increased' : 'Stayed the same', r.results.filter(x => x.result === 'pass').length, r.results.filter(x => x.result === 'fail').length, r.notes || ''])]);
     }
@@ -434,6 +472,11 @@
   };
   window.openStudent = id => { state.studentId = id; state.studentTab = 'overview'; show('student'); };
 
+  // Files a parent attached: images show as thumbnails, everything else as a download link.
+  const fileSize = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+  const fileList = (files, base) => files?.length ? `<div class="file-list">${files.map(f => /^image\//.test(f.type) ? `<a class="file-thumb" href="/api/${base}/${esc(f.id)}" target="_blank" rel="noopener"><img src="/api/${base}/${esc(f.id)}" alt="${esc(f.name)}" loading="lazy"><small>${esc(f.name)}</small></a>` : `<a class="file-chip" href="/api/${base}/${esc(f.id)}" target="_blank" rel="noopener">📎 ${esc(f.name)} <small class="muted">${fileSize(f.size)}</small></a>`).join('')}</div>` : '';
+  window.mfuFileList = fileList;
+
   /* ---------- parent requests (admin & coach) ---------- */
   PAGES.requests = async () => {
     const reqs = await api('requests');
@@ -441,7 +484,7 @@
     const list = reqs.filter(r => F === 'all' || (F === 'open' && r.status === 'open') || (F === 'mine' && r.mine && r.status === 'open'));
     $('#content').innerHTML = hero('Parent requests', 'Meeting requests and questions from parents. They go to the admin and every coach of that child\'s batches.') +
       `<div class="seg att-modes" id="rqf">${(isCoach() ? [['mine', 'My students'], ['open', 'All open'], ['all', 'Everything']] : [['open', 'Open'], ['all', 'Everything']]).map(([k, l]) => `<button type="button" data-f="${k}" class="${F === k ? 'active' : ''}">${l}</button>`).join('')}</div>` +
-      (list.length ? list.map(r => `<article class="card req ${r.status}"><div class="chips"><span class="chip ${r.kind === 'meeting' ? 'type-competition' : 'type-evaluation'}">${r.kind === 'meeting' ? 'Meeting request' : 'Question'}</span><span class="chip ${r.status === 'open' ? 'warn' : 'ok'}">${esc(cap(r.status))}</span><span class="chip">${esc((r.first_name || '') + ' ' + (r.last_name || ''))}</span><small class="muted">${esc(fmtStamp(r.created_at))}</small></div><h3>${esc(r.subject)}</h3><p class="muted">From ${esc(r.parent_name || '')} · ${esc(r.parent_email)}</p>${r.message ? `<p class="event-details">${esc(r.message)}</p>` : ''}${r.preferred_times ? `<p><b>Times that work:</b> ${esc(r.preferred_times)}</p>` : ''}${r.reply ? `<div class="note"><div class="note-head"><b>Reply from ${esc(r.replied_by || '')}</b><small class="muted">${esc(fmtStamp(r.replied_at))}</small></div><p>${esc(r.reply)}</p></div>` : ''}<div class="card-actions"><button class="btn small" data-reply="${esc(r.id)}">Reply</button>${r.kind === 'meeting' && r.status !== 'scheduled' ? `<button class="btn blue small" data-sched="${esc(r.id)}">Schedule meeting</button>` : ''}${r.status !== 'closed' ? `<button class="btn secondary small" data-close-r="${esc(r.id)}">Mark done</button>` : `<button class="btn secondary small" data-open-r="${esc(r.id)}">Reopen</button>`}</div></article>`).join('') : `<div class="card">${empty('📬', 'Nothing here', F === 'all' ? 'Parents haven\'t sent anything yet.' : 'No open requests right now.')}</div>`);
+      (list.length ? list.map(r => `<article class="card req ${r.status}"><div class="chips"><span class="chip ${r.kind === 'meeting' ? 'type-competition' : 'type-evaluation'}">${r.kind === 'meeting' ? 'Meeting request' : 'Question'}</span><span class="chip ${r.status === 'open' ? 'warn' : 'ok'}">${esc(cap(r.status))}</span><span class="chip">${esc((r.first_name || '') + ' ' + (r.last_name || ''))}</span><small class="muted">${esc(fmtStamp(r.created_at))}</small></div><h3>${esc(r.subject)}</h3><p class="muted">From ${esc(r.parent_name || '')} · ${esc(r.parent_email)}</p>${r.message ? `<p class="event-details">${esc(r.message)}</p>` : ''}${r.preferred_times ? `<p><b>Times that work:</b> ${esc(r.preferred_times)}</p>` : ''}${fileList(r.files, 'request-files')}${r.reply ? `<div class="note"><div class="note-head"><b>Reply from ${esc(r.replied_by || '')}</b><small class="muted">${esc(fmtStamp(r.replied_at))}</small></div><p>${esc(r.reply)}</p></div>` : ''}<div class="card-actions"><button class="btn small" data-reply="${esc(r.id)}">Reply</button>${r.kind === 'meeting' && r.status !== 'scheduled' ? `<button class="btn blue small" data-sched="${esc(r.id)}">Schedule meeting</button>` : ''}${r.status !== 'closed' ? `<button class="btn secondary small" data-close-r="${esc(r.id)}">Mark done</button>` : `<button class="btn secondary small" data-open-r="${esc(r.id)}">Reopen</button>`}</div></article>`).join('') : `<div class="card">${empty('📬', 'Nothing here', F === 'all' ? 'Parents haven\'t sent anything yet.' : 'No open requests right now.')}</div>`);
     $$('#rqf button').forEach(b => b.onclick = () => go('requests', { reqFilter: b.dataset.f }));
     $$('[data-reply]').forEach(b => b.onclick = () => {
       const r = reqs.find(x => x.id === b.dataset.reply);
@@ -534,7 +577,7 @@
     const [students, skills] = await Promise.all([api('students'), api('skills')]);
     const log = state.chat ||= [{ me: false, html: `Hi! Tell me what your students are working on in plain language and I'll add it to their skill progress. For example:<br><i>“Riya is working on pole level 3 dive and rope mount. Aarav mastered the pole headstand.”</i><br><i>“Maya and Kabir passed all of rope level 2.”</i>` }];
     $('#content').innerHTML = hero('Skill assistant', 'Type what kids are doing — the assistant finds the students and skills and updates their progress after you check it.') +
-      `<div class="card chat"><div class="chat-log" id="clog"></div><form id="cform" class="chat-form"><textarea id="cin" rows="2" placeholder="e.g. Riya and Dev are working on pole level 2 grip hold and mount" required></textarea><button class="btn">Send</button></form><p class="muted section-gap-sm">I understand: <b>working on / learning / started</b> → Learning · <b>mastered / got it / passed / can do</b> → Mastered · <b>not started / reset</b> → Not started. Say “pole”, “rope” or “yoga” and “level 3” to narrow it down.</p></div>`;
+      `<div class="card chat"><div class="chat-log" id="clog"></div><form id="cform" class="chat-form"><textarea id="cin" rows="2" placeholder="e.g. Riya and Dev are working on pole level 2 grip hold and mount" required></textarea><button class="btn">Send</button></form><p class="muted section-gap-sm">I understand: <b>working on / learning / started</b> → Learning · <b>completed / mastered / got it / passed / can do</b> → Completed · <b>not started / reset</b> → Not started. Say “pole”, “rope” or “yoga” and “level 3” to narrow it down.</p></div>`;
     const draw = () => { $('#clog').innerHTML = log.map((m, i) => `<div class="bubble ${m.me ? 'me' : ''}" data-i="${i}">${m.html}</div>`).join(''); $('#clog').scrollTop = 1e6; wire(); };
     const wire = () => $$('[data-apply]').forEach(b => b.onclick = async () => {
       const card = b.closest('.bubble'), pend = state.chatPending?.[b.dataset.apply]; if (!pend) return;
@@ -558,7 +601,7 @@
       log.push({ me: true, html: esc(text) });
       const { changes, notes } = parsePlain(text, students, skills);
       const key = String(Date.now()); (state.chatPending ||= {})[key] = changes;
-      const SL = { learning: 'Learning', mastered: 'Mastered', not_started: 'Not started' };
+      const SL = { learning: 'Learning', mastered: 'Completed', not_started: 'Not started' };
       log.push({ me: false, html: (changes.length ? `Here's what I'll update — untick anything that's wrong:<div class="chat-changes">${changes.map((c, i) => `<label class="pick"><input type="checkbox" data-ci="${i}" checked><span><b>${esc(nameOf(c.student))}</b><small>${cap(c.skill.apparatus)} L${c.skill.level} · ${esc(c.skill.name)} → <span class="chip s-${c.status}">${SL[c.status]}</span></small></span></label>`).join('')}</div><div class="chat-actions"><button class="btn small" data-apply="${key}">Save these</button></div>` : 'I couldn\'t find any student + skill pairs in that.') + (notes.length ? `<ul class="chat-notes">${notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : '') });
       $('#cin').value = ''; draw();
     };
@@ -637,24 +680,86 @@
     return `<p class="pace-sum">${parts.join(' · ')}. ${stamina}</p>`;
   }
   // Single-series bar chart: one bar per 5-second slice, height = reps in that slice.
+  /* ---------- line charts (every chart in the app) ---------- */
+  // series: [{ name, values: [number|null] }] in fixed palette order; labels: one per x point.
+  // One series → no legend (the title names it). 2–4 series → legend plus a label at each line's end.
+  const LC = new Map(); let lcN = 0;
+  const niceStep = raw => { const p = 10 ** Math.floor(Math.log10(raw || 1)), m = raw / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; };
+  function lineChart(series, { labels, unit = '', title = '', height = 210, marker = null, compact = false } = {}) {
+    series = series.filter(s => s.values.some(v => v != null));
+    if (!series.length || !labels.length) return '<p class="muted">No data yet.</p>';
+    const many = series.length > 1, W = 560, H = compact ? 170 : height, L = 34, R = many ? 86 : 16, T = 14, B = 26, pw = W - L - R, ph = H - T - B, n = labels.length;
+    const max = Math.max(...series.flatMap(s => s.values).filter(v => v != null), 1), step = niceStep(max / 4), top = Math.ceil(max / step) * step || 1;
+    const x = i => L + (n === 1 ? pw / 2 : i * pw / (n - 1)), y = v => T + ph - v / top * ph;
+    let g = '';
+    for (let v = 0; v <= top + 1e-9; v += step) g += `<line x1="${L}" x2="${L + pw}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="lc-grid"/><text x="${L - 6}" y="${(y(v) + 4).toFixed(1)}" class="lc-axis" text-anchor="end">${+v.toFixed(2)}</text>`;
+    const every = Math.ceil(n / (compact ? 5 : 7));
+    labels.forEach((l, i) => { if (i % every === 0 || i === n - 1) g += `<text x="${x(i).toFixed(1)}" y="${H - 6}" class="lc-axis" text-anchor="${n === 1 ? 'middle' : i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}">${esc(l)}</text>`; });
+    if (marker && marker.index > 0) g += `<line x1="${x(marker.index)}" x2="${x(marker.index)}" y1="${T}" y2="${T + ph}" class="lc-mark"/><text x="${x(marker.index) + 4}" y="${T + 10}" class="lc-axis">${esc(marker.label)}</text>`;
+    const ends = [];
+    const lines = series.map((s, k) => {
+      let d = '', pen = false;
+      s.values.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1); pen = true; });
+      const dots = s.values.map((v, i) => v == null ? '' : `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="4" class="lc-dot"/>`).join('');
+      const lastI = s.values.map((v, i) => v == null ? -1 : i).filter(i => i >= 0).pop();
+      if (many && series.length <= 4 && lastI != null) ends.push({ k, x: x(lastI) + 8, y: y(s.values[lastI]) + 4, name: s.name.length > 11 ? s.name.slice(0, 10) + '…' : s.name });
+      return `<g class="lc-s s${k + 1}"><path d="${d}" class="lc-line"/>${dots}</g>`;
+    }).join('');
+    // End-of-line labels: push apart any that would overlap.
+    ends.sort((a, b) => a.y - b.y).forEach((e, i, arr) => { if (i && e.y - arr[i - 1].y < 13) e.y = arr[i - 1].y + 13; });
+    const endLabels = ends.map(e => `<text x="${e.x.toFixed(1)}" y="${e.y.toFixed(1)}" class="lc-end">${esc(e.name)}</text>`).join('');
+    const id = 'lc' + (++lcN); LC.set(id, { labels, series, unit, L, pw, n, T, ph }); if (LC.size > 300) LC.delete(LC.keys().next().value);
+    const legend = many ? `<div class="lc-legend">${series.map((s, k) => `<span><i class="sw s${k + 1}"></i>${esc(s.name)}</span>`).join('')}</div>` : '';
+    const table = `<details class="pace-table"><summary class="muted">See the numbers</summary><div class="table-wrap"><table><thead><tr><th></th>${labels.map(l => `<th>${esc(l)}</th>`).join('')}</tr></thead><tbody>${series.map(s => `<tr><td>${esc(s.name)}</td>${s.values.map(v => `<td>${v ?? '—'}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>`;
+    return `<figure class="lc${compact ? ' lc-compact' : ''}">${title ? `<figcaption class="lc-title">${esc(title)}</figcaption>` : ''}<svg id="${id}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc((title || series.map(s => s.name).join(', ')) + ': ' + series.map(s => s.name + ' ' + s.values.map(v => v ?? 'none').join(', ')).join('; '))}">${g}${lines}${endLabels}<line class="lc-cross" x1="0" x2="0" y1="${T}" y2="${T + ph}" visibility="hidden"/></svg>${legend}${table}</figure>`;
+  }
+  window.mfuLine = lineChart;
+  // Hover anywhere over a chart: a crosshair snaps to the nearest point and the tooltip lists every line's value.
+  const tip = document.createElement('div'); tip.className = 'pace-tip'; tip.hidden = true; document.body.append(tip);
+  let lastSvg = null;
+  document.addEventListener('pointermove', e => {
+    const svg = e.target.closest?.('svg[id^="lc"]');
+    if (lastSvg && lastSvg !== svg) { lastSvg.querySelector('.lc-cross')?.setAttribute('visibility', 'hidden'); tip.hidden = true; }
+    lastSvg = svg; if (!svg) return;
+    const c = LC.get(svg.id); if (!c) return;
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const i = Math.max(0, Math.min(c.n - 1, Math.round(c.n === 1 ? 0 : (p.x - c.L) / c.pw * (c.n - 1))));
+    const cx = c.L + (c.n === 1 ? c.pw / 2 : i * c.pw / (c.n - 1)), cross = svg.querySelector('.lc-cross');
+    cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.setAttribute('visibility', 'visible');
+    tip.innerHTML = `<b>${esc(c.labels[i])}</b>` + c.series.map((s, k) => `<div><i class="sw s${k + 1}"></i>${esc(s.name)}: <b>${s.values[i] ?? '—'}</b>${c.unit ? ' ' + esc(c.unit) : ''}</div>`).join('');
+    tip.hidden = false; tip.style.left = Math.min(e.clientX + 14, innerWidth - 200) + 'px'; tip.style.top = Math.max(8, e.clientY - 20 - tip.offsetHeight) + 'px';
+  }, { passive: true });
+
+  // One-minute set: reps in each 5-second slice as a line, with a marker where the pace dropped.
   function paceChart(taps, { duration = 60, title = '' } = {}) {
     if (!taps.length) return '<p class="muted">No tap times were recorded for this set, so there is no graph.</p>';
-    const s = paceStats(taps, duration), W = 560, H = 200, L = 30, R = 8, T = 12, B = 28, pw = W - L - R, ph = H - T - B;
-    const top = Math.max(2, s.max + (s.max % 2)), step = top <= 6 ? 1 : top <= 12 ? 2 : 5, bw = pw / s.buckets.length, gap = 2;
-    const y = v => T + ph - (v / top) * ph;
-    let grid = '';
-    for (let v = 0; v <= top; v += step) grid += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" class="pace-grid"/><text x="${L - 6}" y="${y(v) + 4}" class="pace-axis" text-anchor="end">${v}</text>`;
-    const bars = s.buckets.map((v, i) => { const x = L + i * bw + gap / 2, w = bw - gap, h = Math.max(0, y(0) - y(v)), r = Math.min(4, w / 2, h);
-      const d = h ? `M${x},${y(0)} V${y(v) + r} Q${x},${y(v)} ${x + r},${y(v)} H${x + w - r} Q${x + w},${y(v)} ${x + w},${y(v) + r} V${y(0)} Z` : '';
-      return `<g class="pace-bar ${i === s.drop ? 'is-drop' : ''}" data-tip="${sliceLabel(i)}: ${v} rep${v === 1 ? '' : 's'}"><rect x="${L + i * bw}" y="${T}" width="${bw}" height="${ph}" fill="transparent"/>${d ? `<path d="${d}"/>` : ''}</g>`; }).join('');
-    const ticks = s.buckets.map((_, i) => i % 2 === 0 ? `<text x="${L + i * bw}" y="${H - 8}" class="pace-axis" text-anchor="${i ? 'middle' : 'start'}">${i * SLICE}s</text>` : '').join('') + `<text x="${W - R}" y="${H - 8}" class="pace-axis" text-anchor="end">${duration}s</text>`;
-    const drop = s.drop > 0 ? `<line x1="${L + s.drop * bw}" x2="${L + s.drop * bw}" y1="${T}" y2="${y(0)}" class="pace-drop"/><text x="${L + s.drop * bw + 4}" y="${T + 10}" class="pace-axis">slowing</text>` : '';
-    return `<figure class="pace"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc((title ? title + ': ' : '') + 'reps per ' + SLICE + ' seconds — ' + s.buckets.join(', '))}">${grid}${bars}${drop}${ticks}</svg><figcaption class="muted">Reps in each ${SLICE}-second slice${title ? ' · ' + esc(title) : ''}</figcaption><details class="pace-table"><summary class="muted">See the numbers</summary><div class="chips">${s.buckets.map((v, i) => `<span class="chip">${sliceLabel(i)}: ${v}</span>`).join('')}</div></details></figure>`;
+    const s = paceStats(taps, duration);
+    return `<div class="pace">${lineChart([{ name: 'Reps', values: s.buckets }], { labels: s.buckets.map((_, i) => `${(i + 1) * SLICE}s`), unit: 'reps', marker: s.drop > 0 ? { index: s.drop, label: 'slowing' } : null })}<p class="muted lc-note">Reps in each ${SLICE}-second slice${title ? ' · ' + esc(title) : ''}</p></div>`;
   }
-  // One tooltip for every pace chart on the page.
-  const tip = document.createElement('div'); tip.className = 'pace-tip'; tip.hidden = true; document.body.append(tip);
-  document.addEventListener('pointerover', e => { const g = e.target.closest?.('.pace-bar'); if (!g) { tip.hidden = true; return; } tip.textContent = g.dataset.tip; tip.hidden = false; });
-  document.addEventListener('pointermove', e => { if (!tip.hidden) { tip.style.left = Math.min(e.clientX + 12, innerWidth - 170) + 'px'; tip.style.top = e.clientY - 34 + 'px'; } });
+
+  // Month-by-month progress for one child: attendance, skills started/completed, one-minute sets, fitness.
+  const COUNT_METRICS = ['pushups', 'situps', 'squats', 'pullups'], HOLD_METRICS = ['three_inch_hold', 'plank'];
+  function progressCharts(c) {
+    const m = c.monthly || { attendance: [], started: [], completed: [] };
+    const now = new Date(), months = [];
+    for (let k = 5; k >= 0; k--) { const d = new Date(now.getFullYear(), now.getMonth() - k, 1); months.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')); }
+    const labels = months.map(x => new Date(x + '-01T12:00:00').toLocaleDateString('en-US', { month: 'short' }));
+    const byMonth = rows => months.map(x => rows.find(r => r.month === x)?.n ?? 0);
+    const best = (rows, keyOf, valOf) => months.map(x => { const v = rows.filter(r => keyOf(r).startsWith(x)).map(valOf); return v.length ? Math.max(...v) : null; });
+    const sets = EXERCISES.map(([k, l]) => ({ name: l, values: best((c.rep_sessions || []).filter(r => r.exercise === k), r => r.record_date, r => r.total) }));
+    const fitCount = COUNT_METRICS.map(k => ({ name: metricLabel(k), values: best((c.fitness || []).filter(r => r.metric === k), r => r.record_date, r => r.value) }));
+    const holds = HOLD_METRICS.map(k => ({ name: metricLabel(k), values: best((c.fitness || []).filter(r => r.metric === k), r => r.record_date, r => r.value) }));
+    const charts = [
+      lineChart([{ name: 'Classes attended', values: byMonth(m.attendance) }], { labels, unit: 'classes', title: 'Classes attended', compact: true }),
+      lineChart([{ name: 'Skills started', values: byMonth(m.started) }, { name: 'Skills completed', values: byMonth(m.completed) }], { labels, unit: 'skills', title: 'Skills started and completed', compact: true }),
+      sets.some(s => s.values.some(v => v != null)) ? lineChart(sets, { labels, unit: 'reps in 1 min', title: 'One-minute sets (best each month)', compact: true }) : '',
+      fitCount.some(s => s.values.some(v => v != null)) ? lineChart(fitCount, { labels, unit: 'reps', title: 'Exercises (best each month)', compact: true }) : '',
+      holds.some(s => s.values.some(v => v != null)) ? lineChart(holds, { labels, unit: 'sec', title: 'Holds (best each month)', compact: true }) : ''
+    ].filter(Boolean);
+    return `<div class="progress-grid">${charts.map(h => `<div class="progress-cell">${h}</div>`).join('')}</div>`;
+  }
+  window.mfuProgressCharts = progressCharts;
   const sessionCard = (r, del) => `<div class="pace-card"><div class="note-head"><b>${esc(exName(r.exercise))} · ${r.total} reps</b><small class="muted">${esc(fmtShort(r.record_date))}</small>${del ? `<button class="icon-btn" data-rsdel="${esc(r.id)}" aria-label="Delete set">✕</button>` : ''}</div>${paceSummary(r.taps)}${paceChart(r.taps, { title: exName(r.exercise) })}</div>`;
   // Newest set per exercise in full, older ones folded away.
   const sessionsBlock = (list, del) => {
@@ -712,11 +817,15 @@
   };
 
   /* ---------- parent portal additions ---------- */
+  const addDaysStr = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  document.addEventListener('click', e => { if (e.target.closest('[data-go-practice]')) { e.preventDefault(); show('p_practice'); } });
   const _childCard = childCard;
   childCard = c => {
     const base = _childCard(c);
     const SL = { passed: 'Passed', not_passed: 'Not passed yet' };
     const extra =
+      `<h4>Progress by month <span class="muted">last 6 months</span></h4>${progressCharts(c)}` +
+      (c.practice?.length ? `<h4>Home practice</h4><p class="muted">${c.practice.length} thing${c.practice.length > 1 ? 's' : ''} to practice at home · done ${((n) => n + (n === 1 ? ' time' : ' times'))(c.practice.reduce((n, a) => n + a.done_dates.filter(d => d >= addDaysStr(-6)).length, 0))} this week. <a href="#" data-go-practice>Open home practice</a></p>` : '') +
       (c.coaches?.length ? `<p class="muted">Coaches: ${c.coaches.map(x => esc(x.name)).join(', ')}</p>` : '') +
       (c.notes?.length ? `<h4>Coach notes <span class="muted">what they did and what's next</span></h4>${noteList(c.notes.slice(0, 3), false)}${c.notes.length > 3 ? `<details><summary class="muted">Older notes (${c.notes.length - 3})</summary>${noteList(c.notes.slice(3), false)}</details>` : ''}` : '') +
       (c.fitness?.length ? `<h4>Fitness</h4>${fitnessTiles(c.fitness)}` : '') +
@@ -750,10 +859,15 @@
     const d = await loadHome();
     const kids = d.children;
     $('#content').innerHTML = hero('Contact coach', 'Ask a question or request a meeting. It goes to the MFU admin and your child\'s coaches.') +
-      (kids.length ? `<form class="card" id="pcf"><div class="seg" id="pck"><button type="button" data-k="question" class="active">Ask a question</button><button type="button" data-k="meeting">Request a meeting</button></div><div class="form-grid"><label>About<select name="student_id">${kids.map(c => `<option value="${esc(c.id)}">${esc(nameOf(c))}${c.coaches?.length ? ' · ' + esc(c.coaches.map(x => x.name).join(', ')) : ''}</option>`).join('')}</select></label><label>Subject<input name="subject" required maxlength="200" placeholder="e.g. Question about level 3 evaluation"></label><label class="wide">Message<textarea name="message" rows="5"></textarea></label><label class="wide" id="pctimes" style="display:none">Days and times that work for you<input name="preferred_times" placeholder="e.g. Weekdays after 6pm, or Saturday morning"></label></div><div class="modal-actions"><button class="btn" id="pcsend">Send</button></div></form>` : `<div class="card">${empty('👋', 'No children linked yet', 'Ask MFU to link your child to this account.')}</div>`) +
-      `<div class="card section-gap"><h3>Your messages</h3>${d.requests?.length ? d.requests.map(r => `<div class="note"><div class="note-head"><b>${esc(r.subject)}</b><small class="muted">${r.kind === 'meeting' ? 'Meeting request' : 'Question'} · ${esc((r.first_name || '') + ' ' + (r.last_name || ''))} · ${esc(fmtStamp(r.created_at))}</small><span class="chip ${r.status === 'open' ? 'warn' : 'ok'}">${r.status === 'open' ? 'Waiting for reply' : r.status === 'scheduled' ? 'Meeting scheduled' : 'Answered'}</span></div>${r.message ? `<p class="muted">${esc(r.message)}</p>` : ''}${r.reply ? `<p><span class="chip ok">${esc(r.replied_by || 'Coach')}</span> ${esc(r.reply)}</p>` : ''}</div>`).join('') : '<p class="muted">Nothing sent yet.</p>'}</div>`;
+      (kids.length ? `<form class="card" id="pcf"><div class="seg" id="pck"><button type="button" data-k="question" class="active">Ask a question</button><button type="button" data-k="meeting">Request a meeting</button></div><div class="form-grid"><label>About<select name="student_id">${kids.map(c => `<option value="${esc(c.id)}">${esc(nameOf(c))}${c.coaches?.length ? ' · ' + esc(c.coaches.map(x => x.name).join(', ')) : ''}</option>`).join('')}</select></label><label>Subject<input name="subject" required maxlength="200" placeholder="e.g. Question about level 3 evaluation"></label><label class="wide">Message<textarea name="message" rows="5"></textarea></label><label class="wide" id="pctimes" style="display:none">Days and times that work for you<input name="preferred_times" placeholder="e.g. Weekdays after 6pm, or Saturday morning"></label><label class="wide">Attach files (optional — up to 3 photos, PDFs, short videos or documents, 1.5 MB each)<input type="file" id="pcfiles" multiple accept="image/*,application/pdf,video/mp4,video/quicktime,.doc,.docx,.txt"></label><div class="wide" id="pcfl"></div></div><div class="modal-actions"><button class="btn" id="pcsend">Send</button></div></form>` : `<div class="card">${empty('👋', 'No children linked yet', 'Ask MFU to link your child to this account.')}</div>`) +
+      `<div class="card section-gap"><h3>Your messages</h3>${d.requests?.length ? d.requests.map(r => `<div class="note"><div class="note-head"><b>${esc(r.subject)}</b><small class="muted">${r.kind === 'meeting' ? 'Meeting request' : 'Question'} · ${esc((r.first_name || '') + ' ' + (r.last_name || ''))} · ${esc(fmtStamp(r.created_at))}</small><span class="chip ${r.status === 'open' ? 'warn' : 'ok'}">${r.status === 'open' ? 'Waiting for reply' : r.status === 'scheduled' ? 'Meeting scheduled' : 'Answered'}</span></div>${r.message ? `<p class="muted">${esc(r.message)}</p>` : ''}${fileList(r.files, 'parent/request-files')}${r.reply ? `<p><span class="chip ok">${esc(r.replied_by || 'Coach')}</span> ${esc(r.reply)}</p>` : ''}</div>`).join('') : '<p class="muted">Nothing sent yet.</p>'}</div>`;
     let kind = 'question';
     $$('#pck button').forEach(b => b.onclick = () => { kind = b.dataset.k; $$('#pck button').forEach(x => x.classList.toggle('active', x === b)); $('#pctimes').style.display = kind === 'meeting' ? '' : 'none'; });
-    $('#pcf') && ($('#pcf').onsubmit = async e => { e.preventDefault(); const btn = $('#pcsend'); btn.disabled = true; try { await api('parent/requests', { method: 'POST', body: JSON.stringify({ kind, ...Object.fromEntries(new FormData(e.target)) }) }); toast(kind === 'meeting' ? 'Meeting request sent' : 'Question sent'); state.home = null; show('p_contact'); } catch (err) { toast(err.message); btn.disabled = false; } });
+    const MAXF = 1.5 * 1024 * 1024;
+    const readFile = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res({ name: f.name, type: f.type || 'application/octet-stream', data: String(r.result).split(',')[1] || '' }); r.onerror = () => rej(new Error('Could not read ' + f.name)); r.readAsDataURL(f); });
+    const checkFiles = () => { const fs = [...($('#pcfiles')?.files || [])]; const bad = fs.length > 3 ? 'Attach up to 3 files.' : fs.find(f => f.size > MAXF) ? `“${fs.find(f => f.size > MAXF).name}” is too big (max 1.5 MB). Try a smaller photo or a shorter video.` : '';
+      $('#pcfl').innerHTML = fs.map(f => `<span class="chip ${f.size > MAXF ? 'warn' : ''}">📎 ${esc(f.name)} · ${fileSize(f.size)}</span>`).join(' ') + (bad ? `<p class="error">${esc(bad)}</p>` : ''); return bad; };
+    $('#pcfiles') && ($('#pcfiles').onchange = checkFiles);
+    $('#pcf') && ($('#pcf').onsubmit = async e => { e.preventDefault(); const bad = checkFiles(); if (bad) return toast(bad); const btn = $('#pcsend'); btn.disabled = true; btn.textContent = 'Sending…'; try { const files = await Promise.all([...($('#pcfiles')?.files || [])].map(readFile)); const f = Object.fromEntries(new FormData(e.target)); delete f.files; await api('parent/requests', { method: 'POST', body: JSON.stringify({ kind, ...f, files }) }); toast(kind === 'meeting' ? 'Meeting request sent' : 'Question sent'); state.home = null; show('p_contact'); } catch (err) { toast(err.message); btn.disabled = false; btn.textContent = 'Send'; } });
   };
 })();

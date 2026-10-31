@@ -107,7 +107,7 @@ function forgotView(mode = 'parent') {
   };
 }
 function setupView(token, who = 'parent') {
-  authCard(`<h2>Choose your password</h2><p>Pick a password with at least 8 characters. You'll use it with your email address to sign in.</p>
+  authCard(`<h2>Choose your password</h2><p>Use at least 8 characters with a letter and a number. You'll use it with your email address to sign in.</p>
   <form id="setup-form"><label>New password<input type="password" id="pw1" autocomplete="new-password" minlength="8" required></label><label>Confirm password<input type="password" id="pw2" autocomplete="new-password" minlength="8" required></label><button class="primary">Save and continue</button><p id="login-error" class="error" role="alert"></p></form>`);
   $('#setup-form').onsubmit = async e => {
     e.preventDefault();
@@ -192,22 +192,22 @@ async function progressModal(student, host) {
   const base = new Map(prog.map(p => [p.skill_id, { status: p.status, started_date: p.started_date || '', mastered_date: p.mastered_date || '' }])), changes = new Map();
   const today = (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
   let app = 'pole';
-  const inner = '<p class="muted">Levels they have already passed count as mastered. Set the next level\'s skills to Learning when they start and Mastered when they get them.</p><div class="seg" id="ptabs"></div><div id="plist"></div><div class="modal-actions"><span class="muted" id="pcount"></span>' + (host ? '' : '<button class="btn secondary" data-close>Cancel</button>') + '<button class="btn" id="psave">Save progress</button></div>';
+  const inner = '<p class="muted">Levels they have already passed count as completed. Set the next level\'s skills to Learning when they start and Completed when they get them.</p><div class="seg" id="ptabs"></div><div id="plist"></div><div class="modal-actions"><span class="muted" id="pcount"></span>' + (host ? '' : '<button class="btn secondary" data-close>Cancel</button>') + '<button class="btn" id="psave">Save progress</button></div>';
   const m = host ? hostView(host, inner) : openModal('Skill progress · ' + nameOf(student), inner, { wide: true });
   const cur = k => changes.get(k) ?? base.get(k) ?? { status: 'not_started', started_date: '', mastered_date: '' };
   const count = () => { m.$('#pcount').textContent = changes.size ? changes.size + ' unsaved change' + (changes.size > 1 ? 's' : '') : ''; };
   const set = (id, patch) => { const next = { ...cur(id), ...patch }; if (next.status === 'not_started') { next.started_date = ''; next.mastered_date = ''; } if (next.status === 'learning') next.mastered_date = ''; changes.set(id, next); };
   const setStatus = (id, status) => { const was = cur(id); const patch = { status }; if (status !== 'not_started' && !was.started_date) patch.started_date = today; if (status === 'mastered' && !was.mastered_date) patch.mastered_date = today; set(id, patch); };
-  const datesHtml = (id, c) => `<span class="skill-dates" data-dates="${esc(id)}" ${c.status === 'not_started' ? 'hidden' : ''}><label>Started<input type="date" data-start="${esc(id)}" value="${esc(c.started_date)}" max="${today}"></label><label data-donewrap ${c.status === 'mastered' ? '' : 'hidden'}>Mastered<input type="date" data-done="${esc(id)}" value="${esc(c.mastered_date)}" max="${today}"></label></span>`;
+  const datesHtml = (id, c) => `<span class="skill-dates" data-dates="${esc(id)}" ${c.status === 'not_started' ? 'hidden' : ''}><label>Started<input type="date" data-start="${esc(id)}" value="${esc(c.started_date)}" max="${today}"></label><label data-donewrap ${c.status === 'mastered' ? '' : 'hidden'}>Completed<input type="date" data-done="${esc(id)}" value="${esc(c.mastered_date)}" max="${today}"></label></span>`;
   const draw = () => {
     m.$('#ptabs').innerHTML = ['pole', 'rope', 'yoga'].map(a => `<button type="button" data-a="${a}" class="${a === app ? 'active' : ''}">${a[0].toUpperCase() + a.slice(1)} <small>(Level ${student[a + '_level']})</small></button>`).join('');
     const list = skills.filter(s => s.apparatus === app), L = levelOfApp(student, app);
     const editable = l => { const ls = list.filter(s => s.level === l); if (!ls.length) return ''; const done = ls.filter(s => cur(s.id).status === 'mastered').length;
-      return `<div class="lvl"><div class="lvl-head"><b>Level ${l}</b><span class="muted">${done}/${ls.length} mastered</span><button type="button" class="btn secondary small" data-all="${l}">Mark all mastered today</button></div>${ls.map(s => { const c = cur(s.id); return `<div class="skill-row"><span class="skill-name">${esc(s.name)}</span><span class="skill-ctl"><select data-skill="${esc(s.id)}"><option value="not_started" ${c.status === 'not_started' ? 'selected' : ''}>Not started</option><option value="learning" ${c.status === 'learning' ? 'selected' : ''}>Learning</option><option value="mastered" ${c.status === 'mastered' ? 'selected' : ''}>Mastered</option></select>${datesHtml(s.id, c)}</span></div>`; }).join('')}</div>`; };
+      return `<div class="lvl"><div class="lvl-head"><b>Level ${l}</b><span class="muted">${done}/${ls.length} completed</span><button type="button" class="btn secondary small" data-all="${l}">Mark all completed today</button></div>${ls.map(s => { const c = cur(s.id); return `<div class="skill-row"><span class="skill-name">${esc(s.name)}</span><span class="skill-ctl"><select data-skill="${esc(s.id)}"><option value="not_started" ${c.status === 'not_started' ? 'selected' : ''}>Not started</option><option value="learning" ${c.status === 'learning' ? 'selected' : ''}>Learning</option><option value="mastered" ${c.status === 'mastered' ? 'selected' : ''}>Completed</option></select>${datesHtml(s.id, c)}</span></div>`; }).join('')}</div>`; };
     const passed = [1, 2, 3, 4, 5].filter(l => l <= L && list.some(s => s.level === l));
     const later = [1, 2, 3, 4, 5].filter(l => l > L + 1);
     m.$('#plist').innerHTML = list.length ?
-      (passed.length ? `<details class="lvl passed-lvls"><summary class="lvl-head"><b>✓ Level${passed.length > 1 ? 's 1–' + L : ' ' + L} passed</b><span class="muted">${list.filter(s => s.level <= L).length} skills counted as mastered</span></summary>${passed.map(l => `<p class="muted section-gap-sm"><b>Level ${l}:</b> ${list.filter(s => s.level === l).map(s => esc(s.name)).join(' · ')}</p>`).join('')}</details>` : '') +
+      (passed.length ? `<details class="lvl passed-lvls"><summary class="lvl-head"><b>✓ Level${passed.length > 1 ? 's 1–' + L : ' ' + L} passed</b><span class="muted">${list.filter(s => s.level <= L).length} skills counted as completed</span></summary>${passed.map(l => `<p class="muted section-gap-sm"><b>Level ${l}:</b> ${list.filter(s => s.level === l).map(s => esc(s.name)).join(' · ')}</p>`).join('')}</details>` : '') +
       (L >= 5 ? `<p class="chip ok section-gap-sm">All 5 levels passed on ${app} 🎉</p>` : `<h4>Working on next: Level ${L + 1}</h4>${editable(L + 1) || '<p class="muted">No skills at this level yet.</p>'}`) +
       (later.some(l => list.some(s => s.level === l)) ? `<details class="section-gap-sm"><summary class="muted">Later levels</summary>${later.map(editable).join('')}</details>` : '')
       : empty('📚', 'No skills yet', 'Import the skill list from the Skill library page first.');
@@ -225,7 +225,7 @@ async function progressModal(student, host) {
   draw();
   m.$('#psave').onclick = async () => {
     if (!changes.size) return host ? toast('Nothing to save') : m.close();
-    for (const [id, c] of changes) if (c.status === 'mastered' && c.started_date && c.mastered_date && c.mastered_date < c.started_date) return toast('A mastered date can’t be before its started date (' + (skills.find(s => s.id === id)?.name || '') + ').');
+    for (const [id, c] of changes) if (c.status === 'mastered' && c.started_date && c.mastered_date && c.mastered_date < c.started_date) return toast('A completed date can’t be before its started date (' + (skills.find(s => s.id === id)?.name || '') + ').');
     try { await api('student-progress', { method: 'POST', body: JSON.stringify({ student_id: student.id, changes: [...changes].map(([skill_id, c]) => ({ skill_id, status: c.status, started_date: c.started_date || null, mastered_date: c.mastered_date || null })) }) }); toast('Progress saved');
       if (host) { for (const [k, v] of changes) base.set(k, v); changes.clear(); draw(); } else m.close(); } catch (e) { toast(e.message); }
   };
@@ -349,7 +349,7 @@ PAGES.email = async () => {
 /* ---------- PARENT portal ---------- */
 async function loadHome() { return (state.home = await api('parent/home')); }
 const pips = n => '<span class="pips">' + [1, 2, 3, 4, 5].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('') + '</span>';
-const STATUS_LABEL = { not_started: 'Not started', learning: 'Learning', mastered: 'Mastered' };
+const STATUS_LABEL = { not_started: 'Not started', learning: 'Learning', mastered: 'Completed' };
 
 function eventCardParent(e) {
   return `<article class="event-card"><div class="date-chip big"><b>${dateObj(e.event_date).getDate()}</b><span>${dateObj(e.event_date).toLocaleDateString('en-US', { month: 'short' })}</span></div><div class="event-main"><div class="chips"><span class="chip type-${esc(e.event_type)}">${typeLabel(e.event_type)}</span><span class="chip ${daysUntil(e.event_date) <= 7 ? 'warn' : ''}">${countdown(e.event_date)}</span></div><h3>${esc(e.title)}</h3><p class="muted">${esc(fmtLong(e.event_date))}${e.event_time ? ' · ' + esc(fmtTime(e.event_time)) : ''}${e.location ? '<br>📍 ' + esc(e.location) : ''}</p>${e.details ? `<p class="event-details">${esc(e.details)}</p>` : ''}${e.signup_url ? `<div class="card-actions">${link(e.signup_url, 'Sign up ↗', 'btn small')}</div>` : ''}</div></article>`;
@@ -359,12 +359,12 @@ function childCard(c) {
   const a = c.attendance, tot = a.present + a.late + a.absent + a.excused, rate = tot ? Math.round((a.present + a.late) / tot * 100) : null;
   const skillBlock = app => {
     const list = c.skills.filter(s => s.apparatus === app); if (!list.length) return '';
-    // Levels they have passed count as mastered; the next level is what they are working on.
+    // Levels they have passed count as completed; the next level is what they are working on.
     const lvl = Number(c[app + '_level']) || 1, next = lvl + 1, st = s => s.level <= lvl ? 'mastered' : s.status;
     const at = list.filter(s => s.level === next), done = at.filter(s => st(s) === 'mastered').length;
     const levels = [1, 2, 3, 4, 5].filter(l => list.some(s => s.level === l));
-    const item = s => `<li><span>${s.video_url ? `<a href="${esc(safeUrl(s.video_url))}" target="_blank" rel="noopener noreferrer">${esc(s.name)}</a>` : esc(s.name)}</span><span class="skill-when">${st(s) === 'mastered' && s.mastered_date ? 'Mastered ' + skillDate(s.mastered_date) : s.started_date && st(s) !== 'not_started' ? 'Started ' + skillDate(s.started_date) : ''}</span><span class="chip s-${st(s)}">${STATUS_LABEL[st(s)]}</span></li>`;
-    return `<details class="skills-acc"><summary><b>${app[0].toUpperCase() + app.slice(1)}</b> · Level ${lvl}${lvl >= 5 ? ' <span class="muted">— all levels passed 🎉</span>' : at.length ? ` <span class="muted">— working on Level ${next}: ${done}/${at.length} skills mastered</span>` : ''}</summary>${lvl < 5 && at.length ? `<div class="bar"><i style="width:${Math.round(done / at.length * 100)}%"></i></div>` : ''}${levels.map(l => `<details ${l === next ? 'open' : ''}><summary class="lv-sum">Level ${l} <span class="muted">${l <= lvl ? '✓ passed' : list.filter(s => s.level === l && st(s) === 'mastered').length + '/' + list.filter(s => s.level === l).length}</span></summary><ul class="skill-list">${list.filter(s => s.level === l).map(item).join('')}</ul></details>`).join('')}</details>`;
+    const item = s => `<li><span>${s.video_url ? `<a href="${esc(safeUrl(s.video_url))}" target="_blank" rel="noopener noreferrer">${esc(s.name)}</a>` : esc(s.name)}</span><span class="skill-when">${st(s) === 'mastered' && s.mastered_date ? 'Completed ' + skillDate(s.mastered_date) : s.started_date && st(s) !== 'not_started' ? 'Started ' + skillDate(s.started_date) : ''}</span><span class="chip s-${st(s)}">${STATUS_LABEL[st(s)]}</span></li>`;
+    return `<details class="skills-acc"><summary><b>${app[0].toUpperCase() + app.slice(1)}</b> · Level ${lvl}${lvl >= 5 ? ' <span class="muted">— all levels passed 🎉</span>' : at.length ? ` <span class="muted">— working on Level ${next}: ${done}/${at.length} skills completed</span>` : ''}</summary>${lvl < 5 && at.length ? `<div class="bar"><i style="width:${Math.round(done / at.length * 100)}%"></i></div>` : ''}${levels.map(l => `<details ${l === next ? 'open' : ''}><summary class="lv-sum">Level ${l} <span class="muted">${l <= lvl ? '✓ passed' : list.filter(s => s.level === l && st(s) === 'mastered').length + '/' + list.filter(s => s.level === l).length}</span></summary><ul class="skill-list">${list.filter(s => s.level === l).map(item).join('')}</ul></details>`).join('')}</details>`;
   };
   return `<section class="card child"><div class="child-head"><div class="avatar">${c.photo_url ? `<img src="${esc(safeUrl(c.photo_url))}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span>${esc((c.first_name[0] || '') + (c.last_name[0] || ''))}</span></div><div><h2>${esc(nameOf(c))}</h2><p class="muted">${esc(c.center_id ? c.center_id[0].toUpperCase() + c.center_id.slice(1) : '')}</p></div></div>
   <div class="levels">${['pole', 'rope', 'yoga'].map((k, i) => `<div class="level-box">${window.MFU_SIL ? MFU_SIL.level(k, c[k + '_level'], i) : ''}<small>${k.toUpperCase()}</small><b>Level ${c[k + '_level']}</b>${pips(c[k + '_level'])}</div>`).join('')}</div>
