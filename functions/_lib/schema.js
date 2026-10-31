@@ -32,6 +32,7 @@ const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS home_assignments (id TEXT PRIMARY KEY, student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE, set_id TEXT REFERENCES exercise_sets(id) ON DELETE CASCADE, exercise_id TEXT REFERENCES exercises(id) ON DELETE CASCADE, reps TEXT DEFAULT '', note TEXT DEFAULT '', frequency TEXT DEFAULT 'Daily', until_date TEXT, assigned_by TEXT, active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS home_checkins (assignment_id TEXT NOT NULL REFERENCES home_assignments(id) ON DELETE CASCADE, done_date TEXT NOT NULL, PRIMARY KEY(assignment_id,done_date))`,
   `CREATE TABLE IF NOT EXISTS request_files (id TEXT PRIMARY KEY, request_id TEXT NOT NULL REFERENCES parent_requests(id) ON DELETE CASCADE, name TEXT NOT NULL, type TEXT, size INTEGER, data BLOB NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE TABLE IF NOT EXISTS signups (id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('parent','coach')), name TEXT NOT NULL, email TEXT NOT NULL COLLATE NOCASE, phone TEXT, address TEXT, emergency_name TEXT, emergency_phone TEXT, age INTEGER, children TEXT DEFAULT '[]', password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', reviewed_by TEXT, reviewed_at TEXT, note TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS parent_requests (id TEXT PRIMARY KEY, parent_id TEXT NOT NULL REFERENCES parents(id) ON DELETE CASCADE, student_id TEXT REFERENCES students(id) ON DELETE SET NULL, kind TEXT NOT NULL CHECK(kind IN ('meeting','question')), subject TEXT NOT NULL, message TEXT DEFAULT '', preferred_times TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'open', reply TEXT, replied_by TEXT, replied_at TEXT, meeting_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS announcements (id TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT DEFAULT '', audience TEXT NOT NULL DEFAULT 'all' CHECK(audience IN ('all','parents','coaches')), center_id TEXT, pinned INTEGER DEFAULT 0, created_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`
 ];
@@ -55,7 +56,15 @@ const COLUMNS = [
   ['coaches', 'tour_done', 'INTEGER DEFAULT 0'],
   ['parents', 'tour_done', 'INTEGER DEFAULT 0'],
   ['eval_participants', 'coach2_id', 'TEXT'],
-  ['eval_reports', 'coach2_id', 'TEXT']
+  ['eval_reports', 'coach2_id', 'TEXT'],
+  ['events', 'finalized_at', 'TEXT'],
+  ['events', 'finalized_by', 'TEXT'],
+  ['parents', 'phone', 'TEXT'],
+  ['parents', 'address', 'TEXT'],
+  ['parents', 'emergency_name', 'TEXT'],
+  ['parents', 'emergency_phone', 'TEXT'],
+  ['students', 'age', 'INTEGER'],
+  ['coaches', 'age', 'INTEGER']
 ];
 
 // The original sessions table only allowed admin and parent roles. Rebuild it once so coach sessions fit, keeping everyone signed in.

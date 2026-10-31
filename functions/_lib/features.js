@@ -65,7 +65,7 @@ export async function parentExtras(env, parent, children) {
       env.DB.prepare('SELECT record_date,metric,value FROM fitness_records WHERE student_id=? ORDER BY record_date DESC LIMIT 200').bind(c.id),
       env.DB.prepare('SELECT id,url,caption,taken_date,created_at FROM student_photos WHERE student_id=? ORDER BY COALESCE(taken_date,created_at) DESC LIMIT 60').bind(c.id),
       env.DB.prepare('SELECT cs.event_id,cs.apparatus,cs.score,e.title,e.event_date,(SELECT COUNT(*)+1 FROM comp_scores x WHERE x.event_id=cs.event_id AND x.apparatus=cs.apparatus AND x.score>cs.score) AS rank,(SELECT COUNT(*) FROM comp_scores x WHERE x.event_id=cs.event_id AND x.apparatus=cs.apparatus) AS total FROM comp_scores cs JOIN events e ON e.id=cs.event_id WHERE cs.student_id=? ORDER BY e.event_date DESC').bind(c.id),
-      env.DB.prepare("SELECT r.apparatus,r.from_level,r.target_level,r.outcome,e.title,e.event_date,(SELECT COUNT(*) FROM eval_results x WHERE x.report_id=r.id AND x.result='pass') AS passed,(SELECT COUNT(*) FROM eval_results x WHERE x.report_id=r.id) AS tried FROM eval_reports r JOIN events e ON e.id=r.event_id WHERE r.student_id=? ORDER BY e.event_date DESC").bind(c.id),
+      env.DB.prepare("SELECT r.apparatus,r.from_level,r.target_level,r.outcome,e.title,e.event_date,(SELECT COUNT(*) FROM eval_results x WHERE x.report_id=r.id AND x.result='pass') AS passed,(SELECT COUNT(*) FROM eval_results x WHERE x.report_id=r.id) AS tried FROM eval_reports r JOIN events e ON e.id=r.event_id WHERE r.student_id=? AND e.finalized_at IS NOT NULL ORDER BY e.event_date DESC").bind(c.id),
       env.DB.prepare('SELECT d.id,d.title,d.demo_date,d.start_time,d.end_time,d.arrive_time,d.location,d.details,ds.status FROM demo_students ds JOIN demos d ON d.id=ds.demo_id WHERE ds.student_id=? ORDER BY d.demo_date DESC').bind(c.id),
       env.DB.prepare('SELECT id,exercise,record_date,total,duration,taps,created_at FROM rep_sessions WHERE student_id=? ORDER BY record_date DESC,created_at DESC LIMIT 30').bind(c.id)
     ]);
@@ -278,7 +278,7 @@ export async function handleFeatures(path, method, request, env, url, actor) {
   // ---- evaluations: participants, assigned evaluator, attendance, per-skill reports, summary, Google Sheet ----
   if (root === 'evaluations' && id) {
     if (method === 'GET' && !action) { const d = await evalData(env, id); return d ? json(d) : json({ error: 'Not found' }, 404); }
-    const event = await one(env, 'SELECT id,title,event_date,event_type,sheet_id FROM events WHERE id=?', id);
+    const event = await one(env, 'SELECT id,title,event_date,event_type,sheet_id,finalized_at FROM events WHERE id=?', id);
     if (!event) return json({ error: 'Evaluation not found.' }, 404);
     if (method === 'POST' && action === 'participants') {
       // Only adds/updates the students sent and removes the ones listed, so two laptops adding kids never wipe each other out.
@@ -298,6 +298,7 @@ export async function handleFeatures(path, method, request, env, url, actor) {
     if (method === 'POST' && action === 'report') {
       const app = body?.apparatus, target = Number(body?.target_level), outcome = body?.outcome === 'passed' ? 'passed' : 'not_passed';
       if (!APPS.includes(app) || !Number.isInteger(target) || target < 1 || target > 5) return json({ error: 'Choose an apparatus and a level from 1 to 5.' }, 400);
+      if (event.finalized_at) return json({ error: 'This evaluation is finalized. Reopen it first to change results.' }, 400);
       if (!body.coach_id) return json({ error: 'Choose an evaluator for this student before saving.' }, 400);
       const coach2 = body.coach2_id && body.coach2_id !== body.coach_id ? body.coach2_id : null;
       const student = await one(env, 'SELECT id,first_name,last_name,pole_level,rope_level,yoga_level FROM students WHERE id=?', body.student_id);
@@ -314,41 +315,53 @@ export async function handleFeatures(path, method, request, env, url, actor) {
         ...results.map(r => env.DB.prepare('INSERT OR IGNORE INTO eval_results(report_id,skill_id,result) SELECT ?,id,? FROM skills WHERE id=?').bind(rid, r.result, r.skill_id)),
         env.DB.prepare('INSERT OR IGNORE INTO eval_participants(event_id,student_id,coach_id,coach2_id) VALUES(?,?,?,?)').bind(id, student.id, body.coach_id, coach2)
       ];
-      // Passing moves the student up to the evaluated level; un-passing puts them back where they started.
-      let newLevel = current;
-      if (outcome === 'passed') newLevel = Math.max(current, target);
-      else if (existing?.outcome === 'passed' && current === existing.target_level && fromLevel) newLevel = fromLevel;
-      if (newLevel !== current) st.push(env.DB.prepare(`UPDATE students SET ${col}=? WHERE id=?`).bind(newLevel, student.id));
-      // Skills they did in the evaluation count as mastered on the evaluation date.
-      for (const r of results.filter(r => r.result === 'pass')) st.push(env.DB.prepare("INSERT INTO student_skill_progress(id,student_id,skill_id,status,started_date,mastered_date) SELECT ?,?,id,'mastered',?,? FROM skills WHERE id=? ON CONFLICT(student_id,skill_id) DO UPDATE SET status='mastered',started_date=COALESCE(student_skill_progress.started_date,excluded.started_date),mastered_date=COALESCE(student_skill_progress.mastered_date,excluded.mastered_date) WHERE student_skill_progress.status<>'mastered'").bind(crypto.randomUUID(), student.id, event.event_date, event.event_date, r.skill_id));
-      // Partly done skills count as being learned.
-      for (const r of results.filter(r => r.result === 'partial')) st.push(env.DB.prepare("INSERT INTO student_skill_progress(id,student_id,skill_id,status,started_date) SELECT ?,?,id,'learning',? FROM skills WHERE id=? ON CONFLICT(student_id,skill_id) DO UPDATE SET status='learning',started_date=COALESCE(student_skill_progress.started_date,excluded.started_date) WHERE student_skill_progress.status='not_started'").bind(crypto.randomUUID(), student.id, event.event_date, r.skill_id));
       await env.DB.batch(st);
-      const change = newLevel > fromLevel ? 'Increased' : 'Stayed the same';
-      // Email the result to the parent right away (skipped when there is no parent email).
-      let emailed = 0;
-      if (body.email_parent !== false && mailConfigured(env)) {
-        const recips = await recipientsFor(env, { type: 'students', student_ids: [student.id] });
-        if (recips.length) {
-          const ids = results.map(r => r.skill_id);
-          const names = new Map(ids.length ? (await all(env, `SELECT id,name FROM skills WHERE id IN (${marks(ids)})`, ...ids)).map(x => [x.id, x.name]) : []);
-          const mark = { pass: '✓ Did it', partial: '◐ Partly', fail: '✗ Not yet' };
-          const coachName = (await one(env, 'SELECT name FROM coaches WHERE id=?', body.coach_id))?.name || '';
-          const lines = [`Here are ${student.first_name}'s results from “${event.title}” (${fmtDate(event.event_date)}) on ${app}, level ${target}.`,
-            outcome === 'passed' ? `${student.first_name} passed level ${target}${change === 'Increased' ? ` and moved up from level ${fromLevel}` : ''}. 🎉` : `${student.first_name} hasn't passed level ${target} yet and stays at level ${newLevel}. The skills below show what to work on next.`,
-            ...(results.length ? [results.map(r => `${mark[r.result]} — ${names.get(r.skill_id) || 'Skill'}`).join('\n')] : []),
-            ...(body.notes ? ['Coach notes: ' + str(body.notes, 2000)] : []), ...(coachName ? ['Evaluated by ' + coachName + '.'] : [])];
-          emailed = (await notify(env, recips, `${student.first_name}'s ${app} evaluation result`, lines)).sent || 0;
-        }
-      }
-      return json({ ok: true, id: rid, from_level: fromLevel, level: newLevel, change, emailed });
+      // Levels, skills and parent emails all wait for "Finalize evaluation".
+      return json({ ok: true, id: rid, from_level: fromLevel, target_level: target, outcome, pending: true });
     }
     if (method === 'POST' && action === 'delete-report') {
-      const r = await one(env, 'SELECT * FROM eval_reports WHERE id=? AND event_id=?', body?.report_id, id);
+      if (event.finalized_at) return json({ error: 'This evaluation is finalized. Reopen it first to change results.' }, 400);
+      const r = await one(env, 'SELECT id FROM eval_reports WHERE id=? AND event_id=?', body?.report_id, id);
       if (!r) return json({ error: 'Not found' }, 404);
-      const st = [env.DB.prepare('DELETE FROM eval_reports WHERE id=?').bind(r.id)];
-      if (r.outcome === 'passed' && r.from_level) st.push(env.DB.prepare(`UPDATE students SET ${r.apparatus}_level=? WHERE id=? AND ${r.apparatus}_level=?`).bind(r.from_level, r.student_id, r.target_level));
-      await env.DB.batch(st);
+      await env.DB.prepare('DELETE FROM eval_reports WHERE id=?').bind(r.id).run();
+      return json({ ok: true });
+    }
+    // Finalize: move every student who passed up to their new level, record the skills, and email every parent.
+    if (method === 'POST' && action === 'finalize') {
+      if (event.finalized_at) return json({ error: 'This evaluation is already finalized.' }, 400);
+      const d = await evalData(env, id);
+      if (!d.reports.length) return json({ error: 'There are no results to finalize yet.' }, 400);
+      const st = [], perStudent = new Map();
+      for (const r of d.reports) {
+        const before = r[r.apparatus + '_level'], after = r.outcome === 'passed' ? Math.max(before, r.target_level) : before;
+        if (after !== before) st.push(env.DB.prepare(`UPDATE students SET ${r.apparatus}_level=? WHERE id=?`).bind(after, r.student_id));
+        for (const x of r.results.filter(x => x.result === 'pass')) st.push(env.DB.prepare("INSERT INTO student_skill_progress(id,student_id,skill_id,status,started_date,mastered_date) SELECT ?,?,id,'mastered',?,? FROM skills WHERE id=? ON CONFLICT(student_id,skill_id) DO UPDATE SET status='mastered',started_date=COALESCE(student_skill_progress.started_date,excluded.started_date),mastered_date=COALESCE(student_skill_progress.mastered_date,excluded.mastered_date) WHERE student_skill_progress.status<>'mastered'").bind(crypto.randomUUID(), r.student_id, event.event_date, event.event_date, x.skill_id));
+        for (const x of r.results.filter(x => x.result === 'partial')) st.push(env.DB.prepare("INSERT INTO student_skill_progress(id,student_id,skill_id,status,started_date) SELECT ?,?,id,'learning',? FROM skills WHERE id=? ON CONFLICT(student_id,skill_id) DO UPDATE SET status='learning',started_date=COALESCE(student_skill_progress.started_date,excluded.started_date) WHERE student_skill_progress.status='not_started'").bind(crypto.randomUUID(), r.student_id, event.event_date, x.skill_id));
+        if (!perStudent.has(r.student_id)) perStudent.set(r.student_id, { first: r.first_name, last: r.last_name, levels: { pole: r.pole_level, rope: r.rope_level, yoga: r.yoga_level }, rows: [] });
+        const ps = perStudent.get(r.student_id); ps.levels[r.apparatus] = after; ps.rows.push({ ...r, before, after });
+      }
+      st.push(env.DB.prepare("UPDATE events SET finalized_at=datetime('now'),finalized_by=? WHERE id=?").bind(by, id));
+      for (let i = 0; i < st.length; i += 90) await env.DB.batch(st.slice(i, i + 90));
+      // One email per child to their parents, with every apparatus they were evaluated on and their levels now.
+      let sent = 0, skipped = 0, moved = 0;
+      const mark = { pass: '✓ Did it', partial: '◐ Partly', fail: '✗ Not yet' };
+      for (const [sid, ps] of perStudent) {
+        moved += ps.rows.some(r => r.after > r.before) ? 1 : 0;
+        if (!mailConfigured(env)) { skipped++; continue; }
+        const recips = await recipientsFor(env, { type: 'students', student_ids: [sid] });
+        if (!recips.length) { skipped++; continue; }
+        const up = ps.rows.filter(r => r.after > r.before);
+        const lines = [`${ps.first}'s results from “${event.title}” (${fmtDate(event.event_date)}) are final.`,
+          up.length ? `🎉 ${ps.first} moved up: ${up.map(r => `${r.apparatus} Level ${r.before} → Level ${r.after}`).join(', ')}.` : `${ps.first} keeps working toward the next level — the skills below show what to practice.`,
+          ...ps.rows.map(r => `${r.apparatus.toUpperCase()} — tried Level ${r.target_level}: ${r.outcome === 'passed' ? 'Passed' : 'Not passed yet'}${r.results.length ? '\n' + r.results.map(x => `${mark[x.result]} — ${x.name}`).join('\n') : ''}${r.notes ? '\nCoach notes: ' + r.notes : ''}`),
+          `${ps.first}'s levels now: Pole Level ${ps.levels.pole} · Rope Level ${ps.levels.rope} · Yoga Level ${ps.levels.yoga}.`];
+        const r = await notify(env, recips, `${ps.first}'s evaluation results and new levels`, lines);
+        sent += r.sent || 0;
+      }
+      return json({ ok: true, students: perStudent.size, moved_up: moved, emailed: sent, no_email: skipped, mail: mailConfigured(env) });
+    }
+    if (method === 'POST' && action === 'reopen') {
+      await env.DB.prepare('UPDATE events SET finalized_at=NULL,finalized_by=NULL WHERE id=?').bind(id).run();
       return json({ ok: true });
     }
     if (method === 'POST' && action === 'sheet') {

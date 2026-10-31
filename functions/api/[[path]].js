@@ -6,9 +6,10 @@ import { handleAdminExtra } from '../_lib/admin-extra.js';
 import { handleCoachAuth, handleCoachAccounts } from '../_lib/coach.js';
 import { handleFeatures } from '../_lib/features.js';
 import { handlePractice } from '../_lib/practice.js';
+import { handleSignup, handleSignupReview } from '../_lib/signup.js';
 import { GOOGLE_SCOPES } from '../_lib/google.js';
 // Coaches can do everything the admin can except manage coach and parent accounts.
-const adminOnly = (path, method) => { const [root] = path.split('/'); return root === 'coach-accounts' || (root === 'parents' && method !== 'GET') || (root === 'coaches' && method !== 'GET'); };
+const adminOnly = (path, method) => { const [root] = path.split('/'); return root === 'coach-accounts' || root === 'signups' || (root === 'parents' && method !== 'GET') || (root === 'coaches' && method !== 'GET'); };
 const TABLES = new Set(['students','coaches','batches','skills','events','routines','student_attendance','coach_attendance','links','shop_items']);
 const URL_FIELDS = new Set(['url','signup_url','photo_url','video_url','image_url']);
 export async function onRequest({request,env,params}){
@@ -56,10 +57,12 @@ export async function onRequest({request,env,params}){
  if(path==='me'&&method==='GET'){const s=await session(request,env);if(!s)return json({authenticated:false});if(s.role==='parent'){const p=s.parent_id?await env.DB.prepare('SELECT name,email,tour_done FROM parents WHERE id=? AND COALESCE(active,1)=1').bind(s.parent_id).first():null;return p?json({authenticated:true,role:'parent',name:p.name,email:p.email,tour_done:!!p.tour_done}):json({authenticated:false})}if(s.role==='coach'){const c=s.coach_id?await env.DB.prepare('SELECT id,name,email,tour_done FROM coaches WHERE id=? AND COALESCE(active,1)=1 AND password_hash IS NOT NULL').bind(s.coach_id).first():null;return c?json({authenticated:true,role:'coach',name:c.name,email:c.email,coach_id:c.id,tour_done:!!c.tour_done}):json({authenticated:false})}return json({authenticated:true,role:s.role})}
  if(path.startsWith('parent/'))return handleParent(path,method,request,env);
  if(path.startsWith('coach/'))return handleCoachAuth(path,method,request,env);
+ if(path.startsWith('signup/'))return handleSignup(path,method,request,env);
  const s=await session(request,env);if(!s||(s.role!=='admin'&&s.role!=='coach'))return json({error:'Please sign in as an administrator or coach.'},401);
  let actor={role:'admin',name:'Admin'};
  if(s.role==='coach'){const c=s.coach_id?await env.DB.prepare('SELECT id,name,email FROM coaches WHERE id=? AND COALESCE(active,1)=1 AND password_hash IS NOT NULL').bind(s.coach_id).first():null;if(!c)return json({error:'Please sign in again.'},401);if(adminOnly(path,method))return json({error:'Only the admin can manage coach and parent accounts.'},403);actor={role:'coach',id:c.id,name:c.name,email:c.email}}
  if(path==='coach-accounts'||path.startsWith('coach-accounts/'))return handleCoachAccounts(path,method,request,env);
+ if(path==='signups'||path.startsWith('signups/'))return handleSignupReview(path,method,request,env,actor);
  { const f=await handleFeatures(path,method,request,env,url,actor);if(f)return f }
  { const pr=await handlePractice(path,method,request,env,url,actor);if(pr)return pr }
  { const extra=await handleAdminExtra(path,method,request,env,url);if(extra)return extra }
