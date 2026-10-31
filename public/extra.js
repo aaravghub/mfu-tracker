@@ -16,7 +16,7 @@ const fmtTime = t => { const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); if (!m) ret
 const fmtStamp = s => { if (!s) return '—'; const d = new Date(String(s).replace(' ', 'T') + 'Z'); return isNaN(d) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
 const countdown = s => { const n = daysUntil(s); return n < 0 ? 'Past' : n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : 'In ' + n + ' days'; };
 const centerName = (centers, id) => centers.find(c => c.id === id)?.name || id || 'All centers';
-const typeLabel = t => ({ competition: 'Competition', evaluation: 'Evaluation', other: 'Event' }[t] || t);
+const typeLabel = t => ({ competition: 'Competition', evaluation: 'Evaluation', demo: 'Demo', meeting: 'Meeting', other: 'Event' }[t] || t);
 const nameOf = s => s.first_name + ' ' + s.last_name;
 const copyText = async t => { try { await navigator.clipboard.writeText(t); toast('Copied to clipboard'); } catch { prompt('Copy this link:', t); } };
 
@@ -50,7 +50,8 @@ function setRole(role, me = {}) {
   state.role = role;
   $('#nav').innerHTML = NAV[role].map(([label, items]) => (label ? `<span class="nav-label">${label}</span>` : '') + items.map(([p, t]) => `<button data-page="${p}">${t}</button>`).join('')).join('');
   $('#logout').classList.remove('hidden');
-  $('#role-pill').textContent = role === 'admin' ? '● Admin' : '● ' + (me.name || me.email || 'Parent');
+  $('#role-pill').textContent = role === 'admin' ? '● Admin' : role === 'coach' ? '● Coach · ' + (me.name || me.email || '') : '● ' + (me.name || me.email || 'Parent');
+  state.me = me;
   document.body.dataset.role = role;
 }
 function clearRole() {
@@ -77,55 +78,56 @@ function authCard(inner) {
 function loginView(mode = 'parent') {
   clearRole();
   authCard(`<h2>Welcome to MFU Tracker</h2>
-  <div class="seg" role="tablist"><button type="button" data-mode="parent" class="${mode === 'parent' ? 'active' : ''}">Parent</button><button type="button" data-mode="admin" class="${mode === 'admin' ? 'active' : ''}">Admin / coach</button></div>
-  ${mode === 'parent'
-    ? `<p>Sign in to follow your child's progress, see upcoming events and find forms.</p>
+  <div class="seg" role="tablist"><button type="button" data-mode="parent" class="${mode === 'parent' ? 'active' : ''}">Parent</button><button type="button" data-mode="coach" class="${mode === 'coach' ? 'active' : ''}">Coach</button><button type="button" data-mode="admin" class="${mode === 'admin' ? 'active' : ''}">Admin</button></div>
+  ${mode !== 'admin'
+    ? `<p>${mode === 'coach' ? 'Sign in to take attendance, run evaluations and follow your students.' : 'Sign in to follow your child\'s progress, see upcoming events and find forms.'}</p>
        <form id="login"><label>Email<input type="email" id="email" autocomplete="username" required></label><label>Password<input type="password" id="password" autocomplete="current-password" required></label><button class="primary">Sign in</button><p id="login-error" class="error" role="alert"></p><p class="center"><a href="#" id="forgot">Forgot password or first time here?</a></p></form>`
     : `<p>Sign in to manage centers, students, classes, skills and families.</p>
        <form id="login"><label>Admin password<input type="password" id="password" autocomplete="current-password" required></label><button class="primary">Sign in</button><p id="login-error" class="error" role="alert"></p></form>`}`);
   $$('.seg button').forEach(b => b.onclick = () => loginView(b.dataset.mode));
-  $('#forgot') && ($('#forgot').onclick = e => { e.preventDefault(); forgotView(); });
+  $('#forgot') && ($('#forgot').onclick = e => { e.preventDefault(); forgotView(mode); });
   $('#login').onsubmit = async e => {
     e.preventDefault(); $('#login-error').textContent = '';
     const btn = e.target.querySelector('button.primary'); btn.disabled = true;
     try {
-      if (mode === 'parent') await api('parent/login', { method: 'POST', body: JSON.stringify({ email: $('#email').value, password: $('#password').value }) });
+      if (mode !== 'admin') await api(mode + '/login', { method: 'POST', body: JSON.stringify({ email: $('#email').value, password: $('#password').value }) });
       else await api('login', { method: 'POST', body: JSON.stringify({ password: $('#password').value }) });
       await enter();
     } catch (err) { $('#login-error').textContent = err.message; btn.disabled = false; }
   };
 }
-function forgotView() {
+function forgotView(mode = 'parent') {
   authCard(`<h2>Set or reset your password</h2><p>Enter the email address MFU has on file for you and we'll send a link to choose a password.</p>
   <form id="forgot-form"><label>Email<input type="email" id="email" autocomplete="username" required></label><button class="primary">Email me a link</button><p id="login-error" class="error" role="alert"></p><p class="center"><a href="#" id="back">Back to sign in</a></p></form>`);
-  $('#back').onclick = e => { e.preventDefault(); loginView(); };
+  $('#back').onclick = e => { e.preventDefault(); loginView(mode); };
   $('#forgot-form').onsubmit = async e => {
     e.preventDefault();
-    try { const r = await api('parent/forgot', { method: 'POST', body: JSON.stringify({ email: $('#email').value }) }); $('#login-error').className = 'muted'; $('#login-error').textContent = r.message; }
+    try { const r = await api((mode === 'coach' ? 'coach' : 'parent') + '/forgot', { method: 'POST', body: JSON.stringify({ email: $('#email').value }) }); $('#login-error').className = 'muted'; $('#login-error').textContent = r.message; }
     catch (err) { $('#login-error').textContent = err.message; }
   };
 }
-function setupView(token) {
+function setupView(token, who = 'parent') {
   authCard(`<h2>Choose your password</h2><p>Pick a password with at least 8 characters. You'll use it with your email address to sign in.</p>
   <form id="setup-form"><label>New password<input type="password" id="pw1" autocomplete="new-password" minlength="8" required></label><label>Confirm password<input type="password" id="pw2" autocomplete="new-password" minlength="8" required></label><button class="primary">Save and continue</button><p id="login-error" class="error" role="alert"></p></form>`);
   $('#setup-form').onsubmit = async e => {
     e.preventDefault();
     if ($('#pw1').value !== $('#pw2').value) { $('#login-error').textContent = 'Passwords do not match.'; return; }
-    try { await api('parent/set-password', { method: 'POST', body: JSON.stringify({ token, password: $('#pw1').value }) }); history.replaceState(null, '', location.pathname); await enter(); }
+    try { await api(who + '/set-password', { method: 'POST', body: JSON.stringify({ token, password: $('#pw1').value }) }); history.replaceState(null, '', location.pathname); await enter(); }
     catch (err) { $('#login-error').textContent = err.message; }
   };
 }
+const startPage = role => ({ parent: 'home', coach: 'coach_home' }[role] || 'overview');
 async function enter() {
   const me = await api('me');
   if (!me.authenticated) return loginView();
   setRole(me.role, me);
-  show(me.role === 'parent' ? 'home' : 'overview');
+  show(startPage(me.role));
 }
 async function checkAuth() {
-  const m = /^#setup=([a-f0-9]{64})$/.exec(location.hash);
-  if (m) return setupView(m[1]);
+  const m = /^#(coach-)?setup=([a-f0-9]{64})$/.exec(location.hash);
+  if (m) return setupView(m[2], m[1] ? 'coach' : 'parent');
   loginView('parent');
-  try { const me = await api('me'); if (me.authenticated) { setRole(me.role, me); show(me.role === 'parent' ? 'home' : 'overview'); } } catch { /* stay on sign-in */ }
+  try { const me = await api('me'); if (me.authenticated) { setRole(me.role, me); show(startPage(me.role)); } } catch { /* stay on sign-in */ }
 }
 $('#logout').onclick = async () => { try { await api('logout', { method: 'POST' }); } catch {} loginView(); };
 
@@ -166,10 +168,11 @@ PAGES.students = async () => {
   const draw = () => {
     const q = $('#filter').value.toLowerCase(), c = $('#cfilter').value;
     const rows = students.filter(s => (!c || s.center_id === c) && [nameOf(s), s.parent_name, s.parent_email].join(' ').toLowerCase().includes(q));
-    $('#rows').innerHTML = rows.length ? `<div class="table-wrap"><table><thead><tr><th>Student</th><th>Center</th><th>Pole</th><th>Rope</th><th>Yoga</th><th>Parent</th><th>Portal</th><th>Actions</th></tr></thead><tbody>${rows.map(s => `<tr><td><b>${esc(nameOf(s))}</b></td><td>${esc(centerName(centers, s.center_id))}</td><td>${s.pole_level}</td><td>${s.rope_level}</td><td>${s.yoga_level}</td><td>${s.parent_email ? esc(s.parent_name || '') + '<br><small class="muted">' + esc(s.parent_email) + '</small>' : '<span class="chip warn">No email</span>'}</td><td>${withAccount.has(s.id) ? '<span class="chip ok">Account</span>' : '<span class="chip">—</span>'}</td><td class="actions"><button class="btn secondary small" data-progress="${esc(s.id)}">Progress</button><button class="btn secondary small" data-att="${esc(s.id)}">Attendance</button><button class="btn secondary small" data-edit="${esc(s.id)}">Edit</button><button class="btn secondary small" data-delete="${esc(s.id)}">Delete</button></td></tr>`).join('')}</tbody></table></div>` : empty('🧒', 'No students found', 'Add a student or change your search.');
+    $('#rows').innerHTML = rows.length ? `<div class="table-wrap"><table><thead><tr><th>Student</th><th>Center</th><th>Pole</th><th>Rope</th><th>Yoga</th><th>Parent</th><th>Portal</th><th>Actions</th></tr></thead><tbody>${rows.map(s => `<tr><td><b>${esc(nameOf(s))}</b></td><td>${esc(centerName(centers, s.center_id))}</td><td>${s.pole_level}</td><td>${s.rope_level}</td><td>${s.yoga_level}</td><td>${s.parent_email ? esc(s.parent_name || '') + '<br><small class="muted">' + esc(s.parent_email) + '</small>' : '<span class="chip warn">No email</span>'}</td><td>${withAccount.has(s.id) ? '<span class="chip ok">Account</span>' : '<span class="chip">—</span>'}</td><td class="actions"><button class="btn secondary small" data-progress="${esc(s.id)}">Progress</button><button class="btn secondary small" data-profile="${esc(s.id)}">Notes & fitness</button><button class="btn secondary small" data-att="${esc(s.id)}">Attendance</button><button class="btn secondary small" data-edit="${esc(s.id)}">Edit</button><button class="btn secondary small" data-delete="${esc(s.id)}">Delete</button></td></tr>`).join('')}</tbody></table></div>` : empty('🧒', 'No students found', 'Add a student or change your search.');
     $$('[data-edit]').forEach(b => b.onclick = () => formModal(configs.students, students.find(x => x.id === b.dataset.edit), 'students'));
     $$('[data-progress]').forEach(b => b.onclick = () => progressModal(students.find(x => x.id === b.dataset.progress)));
     $$('[data-att]').forEach(b => b.onclick = () => studentAttendanceModal(students.find(x => x.id === b.dataset.att)));
+    $$('[data-profile]').forEach(b => b.onclick = () => window.studentProfileModal?.(students.find(x => x.id === b.dataset.profile)));
     $$('[data-delete]').forEach(b => b.onclick = async () => { if (confirm('Delete this student and their records?')) { try { await api('students/' + b.dataset.delete, { method: 'DELETE' }); toast('Deleted'); show('students'); } catch (e) { toast(e.message); } } });
   };
   $('#filter').oninput = draw; $('#cfilter').onchange = draw; draw();
@@ -377,4 +380,5 @@ PAGES.account = async () => {
 // Always fetch fresh parent data when navigating to the home page.
 const _home = PAGES.home; PAGES.home = async () => { state.home = null; await _home(); };
 
-checkAuth();
+// Wait for every deferred script (attendance.js, features.js) so their pages and menus exist before the first page shows.
+document.addEventListener('DOMContentLoaded', checkAuth);

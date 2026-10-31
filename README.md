@@ -13,6 +13,22 @@ Mallakhamb Federation USA management system starter, designed for Cloudflare Pag
 
 Database changes apply automatically on the first request after deploy — nothing to run by hand.
 
+## Coaches, evaluations, meetings and more
+- **Coach accounts**: on *Coach accounts*, click *Create account & invite* for any coach with an email. Coaches sign in on the **Coach** tab and can do everything the admin can except manage coach and parent accounts. Their *My dashboard* shows their batches, students, assigned evaluations, meetings and parent requests.
+- **Calendar & meetings**: a month view of evaluations, competitions, demos and meetings. *New meeting* can create a Google Meet link and Google Calendar invite and email it to coaches, parents (or whole batches) and any other addresses.
+- **Demos**: pick the kids going, the location and the time to arrive, email parents, then mark who came.
+- **Evaluations**: add students and assign an evaluator coach, take evaluation attendance, then for each student pick the apparatus and level and tap ✓/✗ per skill. Passing raises the student's level (and marks those skills mastered); the *Summary* tab shows who increased or stayed the same and saves everything to a Google Sheet (or CSV).
+- **Competition scores**: type pole and rope scores and get leaderboards. Parents see their child's score and rank.
+- **Notes & fitness** (Students → *Notes & fitness*): coach notes on what the child did this batch and what's next, fitness results (dands per minute, push-ups, sit-ups, squats, 3-inch hold, plank, pull-ups, or your own tests) and progress photo links. The *Fitness* page enters a whole batch at once. Parents see all of this.
+- **Parent requests**: parents ask a question or request a meeting from *Contact coach*. It emails the admin and every coach of that child's batches and shows on their dashboards; reply or schedule a meeting from *Parent requests*.
+- **Announcements** for parents, coaches or both, optionally emailed.
+- **Skill assistant**: type "Riya is working on pole level 3 dive and mastered rope mount" and confirm the skill updates it finds (keyword matching, no AI service needed).
+
+Optional settings: `ADMIN_EMAIL` (where parent requests go; defaults to automallakhamb@gmail.com) and `TIME_ZONE` for meeting invites (defaults to `America/New_York`).
+
+### Google Meet and Google Sheets (one time)
+Meet links and Sheets export use the same Google connection as email, with two extra permissions (Calendar events and files the app creates). After deploying, sign in as admin, open `https://mfu-tracker.pages.dev/api/auth/google/start` again, approve the new permissions, and replace the `GMAIL_REFRESH_TOKEN` secret with the new token. In Google Cloud, enable the **Google Calendar API** and **Google Sheets API** for the project. Until then, meetings can still be saved and emailed without a Meet link, and evaluations can be downloaded as CSV.
+
 ## Email setup (one time)
 Email is sent through the Gmail API from `automallakhamb@gmail.com`. Configure these as Cloudflare Pages secrets:
 - `GOOGLE_CLIENT_ID` — OAuth client ID from Google Auth Platform

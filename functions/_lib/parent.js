@@ -2,6 +2,7 @@ import { json, cleanEmail, isEmail, checkPassword, makePassword, sha256, randomH
 import { getSession, startSession, endSession } from './auth.js';
 import { mailConfigured, sendMessages, siteUrl, wrap } from './mail.js';
 import { esc } from './util.js';
+import { parentExtras, handleParentFeatures } from './features.js';
 
 const PARENT_SESSION_SECONDS = 7 * 24 * 3600;
 const TOKEN_SECONDS = 7 * 24 * 3600;
@@ -110,8 +111,15 @@ export async function handleParent(path, method, request, env) {
     const events = (await env.DB.prepare("SELECT id,title,event_type,event_date,event_time,location,center_id,details,signup_url FROM events WHERE event_date>=date('now','-1 day') AND (center_id IS NULL OR center_id=''" + (centers.length ? ' OR center_id IN (' + marks + ')' : '') + ') ORDER BY event_date,event_time').bind(...centers).all()).results;
     const links = (await env.DB.prepare('SELECT id,title,url,category,description FROM links ORDER BY category,title').all()).results;
     const shop = (await env.DB.prepare('SELECT id,title,url,category,price,description FROM shop_items ORDER BY category,title').all()).results;
-    return json({ parent, children, events, links, shop });
+    const extras = await parentExtras(env, parent, children);
+    // Demos their children are in show up alongside evaluations and competitions.
+    const seen = new Set();
+    for (const c of children) for (const d of c.demos) if (d.demo_date >= new Date(Date.now() - 864e5).toISOString().slice(0, 10) && !seen.has(d.id)) { seen.add(d.id); events.push({ id: d.id, title: d.title, event_type: 'demo', event_date: d.demo_date, event_time: d.start_time, arrive_time: d.arrive_time, location: d.location, details: d.details }); }
+    events.sort((a, b) => (a.event_date + (a.event_time || '')).localeCompare(b.event_date + (b.event_time || '')));
+    return json({ parent, children, events, links, shop, ...extras });
   }
+
+  { const f = await handleParentFeatures(sub, method, body, env, request, parent); if (f) return f; }
 
   return json({ error: 'Unknown API route.' }, 404);
 }

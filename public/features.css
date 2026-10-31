@@ -1,0 +1,79 @@
+/* Calendar, evaluations, leaderboards, fitness, photos, notes, chat. Uses the theme variables so dark mode works. */
+.modal .attach-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:6px 0 14px}
+.attach-grid fieldset{border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:0}
+.pick-list{max-height:240px;overflow:auto}
+.chip.type-demo,.cal-item.k-demo{background:#efe8fd;color:#6a3fc8}
+:root[data-theme="dark"] .chip.type-demo,:root[data-theme="dark"] .cal-item.k-demo{background:#2c2347;color:#cdb8ff}
+.soft-card{background:var(--soft);box-shadow:none}
+
+/* calendar */
+.cal-legend{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.cal-h{font:700 11px 'DM Sans',sans-serif;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;padding:4px 6px}
+.cal-cell{min-height:92px;border:1px solid var(--line);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:3px;cursor:pointer;min-width:0;overflow:hidden}
+.cal-cell:hover{border-color:var(--orange)}
+.cal-cell.blank{border:0;cursor:default}
+.cal-cell.today{box-shadow:inset 0 0 0 2px var(--orange)}
+.cal-n{font-weight:700;font-size:12px}
+.cal-item{display:block;font-size:11px;font-weight:600;padding:2px 6px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--soft);color:var(--ink)}
+.cal-legend .cal-item{display:inline-block}
+.cal-item.k-evaluation{background:#e8f1fd;color:#164e8a}
+.cal-item.k-competition{background:var(--brand-soft);color:#cf5310}
+.cal-item.k-meeting{background:var(--ok-bg);color:var(--ok)}
+:root[data-theme="dark"] .cal-item.k-evaluation{background:#172d47;color:#a9d2ff}
+:root[data-theme="dark"] .cal-item.k-competition{color:#ffad7a}
+@media(max-width:700px){.cal-cell{min-height:54px;padding:4px}.cal-cell .cal-item{font-size:0;height:6px;padding:0}.cal-cell small{display:none}}
+
+/* evaluations */
+.eval-list{display:grid;gap:6px;margin-top:8px}
+.eval-row{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;transition:background .15s}
+.eval-row.is-pass{background:var(--ok-bg);border-color:transparent}
+.eval-row.is-fail{background:var(--warn-bg);border-color:transparent}
+.eval-btns{display:flex;gap:6px;flex:none}
+.eval-btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:9px;padding:8px 12px;font:700 13px 'DM Sans',sans-serif;cursor:pointer}
+.eval-row.is-pass .eval-btn.pass{background:var(--ok);color:#fff;border-color:var(--ok)}
+.eval-row.is-fail .eval-btn.fail{background:var(--warn);color:#fff;border-color:var(--warn)}
+.sum-row{padding:12px 0;border-bottom:1px solid var(--line)}.sum-row:last-child{border-bottom:0}
+.sum-line{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px}
+
+/* leaderboard */
+.lb{list-style:none;margin:0;padding:0}
+.lb li{display:flex;align-items:center;gap:12px;padding:9px 6px;border-bottom:1px solid var(--line)}.lb li:last-child{border-bottom:0}
+.lb-rank{width:30px;text-align:center;font-weight:800;color:var(--muted)}
+.lb-name{flex:1;min-width:0}
+.lb li b{font:800 17px Manrope,sans-serif}
+.lb li.top1{background:linear-gradient(90deg,#fff6d6,transparent);border-radius:10px}
+:root[data-theme="dark"] .lb li.top1{background:linear-gradient(90deg,#3d3417,transparent)}
+
+/* fitness */
+.fit-table input{min-width:76px;max-width:110px;padding:8px}
+.fit-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:8px 0}
+.fit-tile{border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:2px}
+.fit-tile small{color:var(--muted);font-weight:700}
+.fit-tile b{font:800 24px Manrope,sans-serif}
+.fit-tile span{font-size:12px}.fit-tile .up{color:var(--ok);font-weight:700}.fit-tile .down{color:var(--warn);font-weight:700}
+
+/* photos */
+.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:8px 0}
+.photo-grid figure{margin:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--soft)}
+.photo-grid img{display:block;width:100%;aspect-ratio:1;object-fit:cover}
+.photo-grid figcaption{padding:6px 8px;font-size:12px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.photo-link{display:grid;place-items:center;aspect-ratio:1;font-weight:700;color:var(--blue)}
+
+/* notes, requests, announcements */
+.note{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:8px 0}
+.note.pinned{border-color:#ffd4bb;background:var(--brand-soft)}
+.note p{margin:6px 0 0;line-height:1.5}
+.note-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.note-head small{flex:1}
+.req,.ann{margin-bottom:14px}.req h3,.ann h3{margin:10px 0 4px}
+.req.closed{opacity:.7}
+
+/* skill assistant chat */
+.chat-log{display:flex;flex-direction:column;gap:10px;max-height:58vh;overflow:auto;padding:4px 2px 12px}
+.bubble{max-width:min(620px,92%);background:var(--soft);border-radius:14px 14px 14px 4px;padding:12px 14px;line-height:1.5}
+.bubble.me{align-self:flex-end;background:var(--orange);color:#fff;border-radius:14px 14px 4px 14px}
+.chat-form{display:flex;gap:8px;align-items:flex-end;border-top:1px solid var(--line);padding-top:12px}
+.chat-changes{margin:8px 0}
+.chat-notes{margin:8px 0 0;padding-left:18px;color:var(--muted);font-size:13px}
+.chat-actions{margin-top:6px}
+@media(max-width:600px){.modal .attach-grid{grid-template-columns:1fr}.eval-row{flex-direction:column;align-items:stretch}.eval-btns .eval-btn{flex:1}}
