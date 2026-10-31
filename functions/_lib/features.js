@@ -60,15 +60,17 @@ const changeLabel = r => r.outcome === 'passed' && r.target_level > (r.from_leve
 /* ---------- parent portal additions ---------- */
 export async function parentExtras(env, parent, children) {
   for (const c of children) {
-    const [notes, fitness, photos, scores, evals, demos, reps] = await env.DB.batch([
+    const [notes, fitness, photos, scores, evals, demos, reps, evalAtt] = await env.DB.batch([
       env.DB.prepare('SELECT n.id,n.worked_on,n.next_steps,n.author_name,n.created_at,b.name AS batch FROM student_notes n LEFT JOIN batches b ON b.id=n.batch_id WHERE n.student_id=? ORDER BY n.created_at DESC LIMIT 20').bind(c.id),
       env.DB.prepare('SELECT record_date,metric,value FROM fitness_records WHERE student_id=? ORDER BY record_date DESC LIMIT 200').bind(c.id),
       env.DB.prepare('SELECT id,url,caption,taken_date,created_at FROM student_photos WHERE student_id=? ORDER BY COALESCE(taken_date,created_at) DESC LIMIT 60').bind(c.id),
       env.DB.prepare('SELECT cs.event_id,cs.apparatus,cs.score,e.title,e.event_date,(SELECT COUNT(*)+1 FROM comp_scores x WHERE x.event_id=cs.event_id AND x.apparatus=cs.apparatus AND x.score>cs.score) AS rank,(SELECT COUNT(*) FROM comp_scores x WHERE x.event_id=cs.event_id AND x.apparatus=cs.apparatus) AS total FROM comp_scores cs JOIN events e ON e.id=cs.event_id WHERE cs.student_id=? ORDER BY e.event_date DESC').bind(c.id),
       env.DB.prepare("SELECT r.apparatus,r.from_level,r.target_level,r.outcome,e.title,e.event_date,(SELECT COUNT(*) FROM eval_results x WHERE x.report_id=r.id AND x.result='pass') AS passed,(SELECT COUNT(*) FROM eval_results x WHERE x.report_id=r.id) AS tried FROM eval_reports r JOIN events e ON e.id=r.event_id WHERE r.student_id=? AND e.finalized_at IS NOT NULL ORDER BY e.event_date DESC").bind(c.id),
       env.DB.prepare('SELECT d.id,d.title,d.demo_date,d.start_time,d.end_time,d.arrive_time,d.location,d.details,ds.status FROM demo_students ds JOIN demos d ON d.id=ds.demo_id WHERE ds.student_id=? ORDER BY d.demo_date DESC').bind(c.id),
-      env.DB.prepare('SELECT id,exercise,record_date,total,duration,taps,created_at FROM rep_sessions WHERE student_id=? ORDER BY record_date DESC,created_at DESC LIMIT 30').bind(c.id)
+      env.DB.prepare('SELECT id,exercise,record_date,total,duration,taps,created_at FROM rep_sessions WHERE student_id=? ORDER BY record_date DESC,created_at DESC LIMIT 30').bind(c.id),
+      env.DB.prepare("SELECT e.id,e.title,e.event_date,ep.status FROM eval_participants ep JOIN events e ON e.id=ep.event_id WHERE ep.student_id=? ORDER BY e.event_date DESC").bind(c.id)
     ]);
+    c.eval_attendance = evalAtt.results;
     // Demo routines for the demos this child is in (a routine with no performers listed is for the whole group).
     const demoIds = demos.results.map(d => d.id);
     const routines = demoIds.length ? await all(env, `SELECT id,demo_id,title,apparatus,content,video_url,student_ids FROM demo_routines WHERE demo_id IN (${marks(demoIds)}) ORDER BY sort_order,created_at`, ...demoIds) : [];
@@ -309,8 +311,8 @@ export async function handleFeatures(path, method, request, env, url, actor) {
       const fromLevel = existing ? existing.from_level : current;
       const rid = existing?.id || crypto.randomUUID();
       const st = [
-        env.DB.prepare("INSERT INTO eval_reports(id,event_id,student_id,apparatus,from_level,target_level,coach_id,coach2_id,outcome,notes,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,datetime('now')) ON CONFLICT(event_id,student_id,apparatus) DO UPDATE SET target_level=excluded.target_level,coach_id=excluded.coach_id,coach2_id=excluded.coach2_id,outcome=excluded.outcome,notes=excluded.notes,updated_at=excluded.updated_at")
-          .bind(rid, id, student.id, app, fromLevel, target, body.coach_id, coach2, outcome, str(body.notes, 2000)),
+        env.DB.prepare("INSERT INTO eval_reports(id,event_id,student_id,apparatus,from_level,target_level,coach_id,coach2_id,outcome,notes,updated_at,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,datetime('now'),?) ON CONFLICT(event_id,student_id,apparatus) DO UPDATE SET target_level=excluded.target_level,coach_id=excluded.coach_id,coach2_id=excluded.coach2_id,outcome=excluded.outcome,notes=excluded.notes,updated_at=excluded.updated_at,updated_by=excluded.updated_by")
+          .bind(rid, id, student.id, app, fromLevel, target, body.coach_id, coach2, outcome, str(body.notes, 2000), by),
         env.DB.prepare('DELETE FROM eval_results WHERE report_id=?').bind(rid),
         ...results.map(r => env.DB.prepare('INSERT OR IGNORE INTO eval_results(report_id,skill_id,result) SELECT ?,id,? FROM skills WHERE id=?').bind(rid, r.result, r.skill_id)),
         env.DB.prepare('INSERT OR IGNORE INTO eval_participants(event_id,student_id,coach_id,coach2_id) VALUES(?,?,?,?)').bind(id, student.id, body.coach_id, coach2)

@@ -73,7 +73,9 @@ nav button[data-page]{display:flex;align-items:center;gap:10px}
 .nav-ic{width:22px;text-align:center;flex:none;font-size:15px}
 .nav-tx{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #hdr-logout{white-space:nowrap}
-#hdr-logout[hidden]{display:none!important}
+#hdr-logout[hidden],#refresh-btn[hidden]{display:none!important}
+#refresh-btn{white-space:nowrap}
+.event-att .chip{white-space:nowrap}
 
 /* desktop: icon rail that slides open on hover */
 @media(min-width:851px){

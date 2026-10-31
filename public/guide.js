@@ -61,6 +61,9 @@
   headTitle.insertAdjacentHTML('afterbegin', '<button id="back-btn" class="btn secondary small" type="button" hidden title="Go back (Ctrl+Z)">← Back</button>');
   headActions.insertAdjacentHTML('afterbegin', '<button id="tour-btn" class="btn secondary small" type="button" hidden title="Replay the tutorial">? Tour</button>');
   $('#back-btn').onclick = back;
+  // Reload the current page's data (e.g. results others just saved) without reloading the whole site.
+  $('#back-btn').insertAdjacentHTML('afterend', '<button id="refresh-btn" class="btn secondary small" type="button" hidden title="Get the latest data for this page">↻ Refresh</button>');
+  $('#refresh-btn').onclick = async () => { const b = $('#refresh-btn'), y = scrollY; b.disabled = true; state.home = null; try { await show(state.page); scrollTo(0, y); toast('Up to date'); } finally { b.disabled = false; } };
   $('#tour-btn').onclick = () => tour.start(state.role);
   document.body.insertAdjacentHTML('beforeend', '<nav id="tabbar" aria-label="Quick links"></nav>');
   const TABS = {
@@ -73,6 +76,7 @@
     $('#back-btn').hidden = !on || !stack.length;
     $('#tour-btn').hidden = !on;
     $('#hdr-logout').hidden = !on;
+    $('#refresh-btn').hidden = !on;
     const tabs = on ? TABS[state.role] || [] : [];
     $('#tabbar').innerHTML = tabs.map(([p, i, l]) => `<button type="button" data-tab="${p}" class="${state.page === p || (p === 'students' && state.page === 'student') ? 'active' : ''}"><span class="ti" aria-hidden="true">${i}</span>${l}</button>`).join('') + (on ? '<button type="button" data-tab="__menu"><span class="ti" aria-hidden="true">☰</span>More</button>' : '');
   }
