@@ -336,7 +336,7 @@ export async function handleFeatures(path, method, request, env, url, actor) {
     }
   }
 
-  // ---- fitness: dands per minute, push-ups, sit-ups, squats, holds ... ----
+  // ---- fitness: dasrang per minute, push-ups, sit-ups, squats, holds ... ----
   const fitnessStmts = (sid, date, batchId, values) => Object.entries(values || {}).filter(([k]) => METRIC.test(k)).map(([k, v]) => {
     if (v === '' || v === null || v === undefined) return env.DB.prepare('DELETE FROM fitness_records WHERE student_id=? AND record_date=? AND metric=?').bind(sid, date, k);
     const n = Number(v); if (!Number.isFinite(n) || n < 0 || n > 100000) throw new Error('Fitness values must be numbers.');
@@ -432,6 +432,46 @@ export async function handleFeatures(path, method, request, env, url, actor) {
     const requests = (await all(env, "SELECT r.id,r.kind,r.subject,r.status,r.created_at,r.student_id,p.name AS parent_name,s.first_name,s.last_name FROM parent_requests r JOIN parents p ON p.id=r.parent_id LEFT JOIN students s ON s.id=r.student_id WHERE r.status='open' ORDER BY r.created_at DESC")).filter(r => mine.has(r.student_id));
     const email = cleanEmail(actor.email);
     return json({ coach: { id: actor.id, name: actor.name }, batches: batches.results, students: students.results, evaluations: evals.results, announcements: ann.results, requests, meetings: meetings.results.filter(m => parseList(m.attendees).map(cleanEmail).includes(email)).map(({ attendees, ...m }) => m) });
+  }
+
+  // ---- centers: add, rename, remove ----
+  if (root === 'centers-summary' && method === 'GET') {
+    return json(await all(env, "SELECT c.id,c.name,(SELECT COUNT(*) FROM students s WHERE s.center_id=c.id AND COALESCE(s.active,1)=1) AS students,(SELECT COUNT(*) FROM batches b WHERE b.center_id=c.id) AS batches,(SELECT COUNT(DISTINCT x.id) FROM coaches x LEFT JOIN coach_centers cc ON cc.coach_id=x.id WHERE cc.center_id=c.id OR x.center_id=c.id) AS coaches FROM centers c ORDER BY c.name"));
+  }
+  if (root === 'centers' && method !== 'GET') {
+    const name = str(body?.name, 80);
+    if (method === 'POST' && !id) {
+      if (!name) return json({ error: 'Give the center a name.' }, 400);
+      if (await one(env, 'SELECT 1 x FROM centers WHERE lower(name)=lower(?)', name)) return json({ error: 'A center with that name already exists.' }, 400);
+      let slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'center', n = 1, cid = slug;
+      while (await one(env, 'SELECT 1 x FROM centers WHERE id=?', cid)) cid = slug + '-' + (++n);
+      await env.DB.prepare('INSERT INTO centers(id,name) VALUES(?,?)').bind(cid, name).run();
+      return json({ ok: true, id: cid }, 201);
+    }
+    if (method === 'PUT' && id) {
+      if (!name) return json({ error: 'Give the center a name.' }, 400);
+      if (await one(env, 'SELECT 1 x FROM centers WHERE lower(name)=lower(?) AND id<>?', name, id)) return json({ error: 'A center with that name already exists.' }, 400);
+      await env.DB.prepare('UPDATE centers SET name=? WHERE id=?').bind(name, id).run();
+      return json({ ok: true });
+    }
+    if (method === 'DELETE' && id) {
+      const used = await one(env, 'SELECT (SELECT COUNT(*) FROM students WHERE center_id=?)+(SELECT COUNT(*) FROM batches WHERE center_id=?) AS n', id, id);
+      if (used.n) return json({ error: 'Move or delete the students and batches at this center first.' }, 400);
+      await env.DB.batch([
+        env.DB.prepare('UPDATE coaches SET center_id=NULL WHERE center_id=?').bind(id),
+        env.DB.prepare('DELETE FROM coach_centers WHERE center_id=?').bind(id),
+        env.DB.prepare('UPDATE events SET center_id=NULL WHERE center_id=?').bind(id),
+        env.DB.prepare('UPDATE demos SET center_id=NULL WHERE center_id=?').bind(id),
+        env.DB.prepare('UPDATE announcements SET center_id=NULL WHERE center_id=?').bind(id),
+        env.DB.prepare('DELETE FROM centers WHERE id=?').bind(id)
+      ]);
+      return json({ ok: true });
+    }
+  }
+
+  // ---- every coach's centers in one call (coaches can work at several) ----
+  if (root === 'coach-centers-all' && method === 'GET') {
+    return json(await all(env, 'SELECT coach_id,center_id FROM coach_centers UNION SELECT id,center_id FROM coaches WHERE center_id IS NOT NULL AND id NOT IN (SELECT coach_id FROM coach_centers)'));
   }
 
   // ---- small counters for the admin overview ----

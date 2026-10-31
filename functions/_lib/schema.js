@@ -12,6 +12,7 @@ const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS login_attempts (key TEXT PRIMARY KEY, count INTEGER NOT NULL DEFAULT 0, window_start INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS email_log (id TEXT PRIMARY KEY, subject TEXT, audience TEXT, total INTEGER DEFAULT 0, sent INTEGER DEFAULT 0, failed INTEGER DEFAULT 0, is_test INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   // Coach accounts, meetings, demos, evaluations, competitions, notes, fitness, photos, requests, announcements.
+  `CREATE TABLE IF NOT EXISTS coach_centers (coach_id TEXT NOT NULL REFERENCES coaches(id) ON DELETE CASCADE, center_id TEXT NOT NULL REFERENCES centers(id) ON DELETE CASCADE, PRIMARY KEY(coach_id,center_id))`,
   `CREATE TABLE IF NOT EXISTS coach_password_tokens (token_hash TEXT PRIMARY KEY, coach_id TEXT NOT NULL REFERENCES coaches(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS meetings (id TEXT PRIMARY KEY, title TEXT NOT NULL, meeting_date TEXT NOT NULL, start_time TEXT, end_time TEXT, location TEXT, description TEXT DEFAULT '', meet_url TEXT, calendar_event_id TEXT, calendar_url TEXT, attendees TEXT DEFAULT '[]', request_id TEXT, created_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS demos (id TEXT PRIMARY KEY, title TEXT NOT NULL, demo_date TEXT NOT NULL, start_time TEXT, end_time TEXT, arrive_time TEXT, location TEXT, center_id TEXT, details TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,

@@ -19,7 +19,7 @@ Database changes apply automatically on the first request after deploy — nothi
 - **Demos**: pick the kids going, the location and the time to arrive, email parents, then mark who came.
 - **Evaluations**: add students and assign an evaluator coach, take evaluation attendance, then for each student pick the apparatus and level and tap ✓/✗ per skill. Passing raises the student's level (and marks those skills mastered); the *Summary* tab shows who increased or stayed the same and saves everything to a Google Sheet (or CSV).
 - **Competition scores**: type pole and rope scores and get leaderboards. Parents see their child's score and rank.
-- **Notes & fitness** (Students → *Notes & fitness*): coach notes on what the child did this batch and what's next, fitness results (dands per minute, push-ups, sit-ups, squats, 3-inch hold, plank, pull-ups, or your own tests) and progress photo links. The *Fitness* page enters a whole batch at once. Parents see all of this.
+- **Notes & fitness** (Students → *Notes & fitness*): coach notes on what the child did this batch and what's next, fitness results (dasrang per minute, push-ups, sit-ups, squats, 3-inch hold, plank, pull-ups, or your own tests) and progress photo links. The *Fitness* page enters a whole batch at once. Parents see all of this.
 - **Parent requests**: parents ask a question or request a meeting from *Contact coach*. It emails the admin and every coach of that child's batches and shows on their dashboards; reply or schedule a meeting from *Parent requests*.
 - **Announcements** for parents, coaches or both, optionally emailed.
 - **Skill assistant**: type "Riya is working on pole level 3 dive and mastered rope mount" and confirm the skill updates it finds (keyword matching, no AI service needed).

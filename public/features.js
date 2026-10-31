@@ -7,7 +7,7 @@
   const APPS = ['pole', 'rope', 'yoga'];
   const cap = s => s ? s[0].toUpperCase() + s.slice(1) : '';
   const STAT = ['present', 'late', 'absent', 'excused'];
-  const METRICS = [['dands_1min', 'Dands in 1 min'], ['pushups', 'Push-ups'], ['situps', 'Sit-ups'], ['squats', 'Squats'], ['three_inch_hold', '3-inch hold (sec)'], ['plank', 'Plank (sec)'], ['pullups', 'Pull-ups']];
+  const METRICS = [['dasrang_1min', 'Dasrang in 1 min'], ['pushups', 'Push-ups'], ['situps', 'Sit-ups'], ['squats', 'Squats'], ['three_inch_hold', '3-inch hold (sec)'], ['plank', 'Plank (sec)'], ['pullups', 'Pull-ups']];
   const customMetrics = () => { try { return JSON.parse(localStorage.getItem('mfu-metrics') || '[]'); } catch { return []; } };
   const allMetrics = () => [...METRICS, ...customMetrics().filter(([k]) => !METRICS.some(m => m[0] === k))];
   const metricLabel = k => allMetrics().find(m => m[0] === k)?.[1] || k.replace(/_/g, ' ');
@@ -33,7 +33,7 @@
 
   /* ---------- navigation ---------- */
   const EVENTS_NAV = ['Events', [['calendar', 'Calendar & meetings'], ['evaluations', 'Evaluations'], ['competitions', 'Competition scores'], ['demos', 'Demos'], ['events', 'Event list']]];
-  const MANAGE = [['overview', 'Overview'], ['students', 'Students'], ['batches', 'Batches'], ['coaches', 'Coaches'], ['attendance', 'Attendance'], ['fitness', 'Fitness'], ['skills', 'Skill library'], ['routines', 'Routines']];
+  const MANAGE = [['overview', 'Overview'], ['students', 'Students'], ['batches', 'Batches'], ['coaches', 'Coaches'], ['centers', 'Centers'], ['attendance', 'Attendance'], ['fitness', 'Fitness'], ['skills', 'Skill library'], ['routines', 'Routines']];
   NAV.admin = [['Manage', MANAGE], EVENTS_NAV,
     ['Families', [['parents', 'Parents'], ['requests', 'Parent requests'], ['announcements', 'Announcements'], ['links', 'Links & forms'], ['shop', 'Shop'], ['email', 'Email parents']]],
     ['Tools', [['assistant', 'Skill assistant'], ['coach_accounts', 'Coach accounts'], ['timers', 'Timers']]]];
@@ -41,7 +41,7 @@
     ['Families', [['links', 'Links & forms'], ['shop', 'Shop'], ['email', 'Email parents']]],
     ['Tools', [['assistant', 'Skill assistant'], ['timers', 'Timers'], ['c_account', 'Account']]]];
   NAV.parent = [['', [['home', 'My children'], ['p_announcements', 'Announcements'], ['p_events', 'Events'], ['p_contact', 'Contact coach'], ['p_links', 'Forms & links'], ['p_shop', 'Shop'], ['account', 'Account']]]];
-  Object.assign(titles, { coach_home: 'My dashboard', calendar: 'Calendar & meetings', evaluations: 'Evaluations', competitions: 'Competition scores', demos: 'Demos', requests: 'Parent requests', announcements: 'Announcements', assistant: 'Skill assistant', coach_accounts: 'Coach accounts', fitness: 'Fitness', c_account: 'Account', p_announcements: 'Announcements', p_contact: 'Contact coach', events: 'Event list' });
+  Object.assign(titles, { centers: 'Centers', coach_home: 'My dashboard', calendar: 'Calendar & meetings', evaluations: 'Evaluations', competitions: 'Competition scores', demos: 'Demos', requests: 'Parent requests', announcements: 'Announcements', assistant: 'Skill assistant', coach_accounts: 'Coach accounts', fitness: 'Fitness', c_account: 'Account', p_announcements: 'Announcements', p_contact: 'Contact coach', events: 'Event list' });
 
   /* ---------- admin overview: add requests, demos and meetings ---------- */
   const _overview = PAGES.overview;
@@ -334,7 +334,7 @@
   PAGES.fitness = async () => {
     const batches = await api('batches');
     const F = state.fit ||= { batch: batches[0]?.id || '', date: todayStr() };
-    $('#content').innerHTML = hero('Fitness', 'Record dands per minute, push-ups, sit-ups, squats, holds and more for a whole batch. Parents see each kid\'s progress.', '<button class="btn secondary" id="addmetric">+ Add a test</button>') +
+    $('#content').innerHTML = hero('Fitness', 'Record dasrang per minute, push-ups, sit-ups, squats, holds and more for a whole batch. Parents see each kid\'s progress.', '<button class="btn secondary" id="addmetric">+ Add a test</button>') +
       `<div class="card"><div class="form-grid"><label>Batch<select id="fbatch">${batches.map(b => `<option value="${esc(b.id)}" ${b.id === F.batch ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label><label>Date<input type="date" id="fdate" value="${esc(F.date)}"></label></div><div id="fgrid" class="section-gap"></div><div class="modal-actions"><button class="btn" id="fsave">Save fitness</button></div></div>`;
     const load = async () => {
       if (!F.batch) { $('#fgrid').innerHTML = empty('🏋️', 'No batches', 'Add a batch first.'); return; }
@@ -522,6 +522,69 @@
     draw();
   };
   window.MFU_parsePlain = parsePlain;
+
+  /* ---------- coaches: each coach can work at several centers ---------- */
+  PAGES.coaches = async () => {
+    const [coaches, centers, links] = await Promise.all([api('coaches'), api('centers'), api('coach-centers-all')]);
+    const canEdit = !isCoach();
+    const mine = id => links.filter(l => l.coach_id === id).map(l => l.center_id);
+    $('#content').innerHTML = hero('Coaches', 'Coaches can work at more than one center. Tick every center they coach at.', canEdit ? '<button class="btn secondary" data-go="centers">Manage centers</button><button class="btn" id="add-coach">+ Add coach</button>' : '') +
+      `<div class="toolbar"><input id="cofilter" placeholder="Search coaches..."><select id="cocenter" style="max-width:220px"><option value="">All centers</option>${centers.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></div><div id="corows"></div>`;
+    const draw = () => {
+      const q = $('#cofilter').value.toLowerCase(), cf = $('#cocenter').value;
+      const rows = coaches.filter(c => (!cf || mine(c.id).includes(cf)) && [c.name, c.email, c.phone].join(' ').toLowerCase().includes(q));
+      $('#corows').innerHTML = rows.length ? `<div class="table-wrap"><table><thead><tr><th>Coach</th><th>Centers</th><th>Email</th><th>Phone</th>${canEdit ? '<th>Actions</th>' : ''}</tr></thead><tbody>${rows.map(c => `<tr><td><b>${esc(c.name)}</b>${c.active === 0 ? ' <span class="chip">Inactive</span>' : ''}</td><td><div class="chips">${mine(c.id).map(id => `<span class="chip">${esc(centerName(centers, id))}</span>`).join('') || '<span class="chip warn">No center</span>'}</div></td><td>${esc(c.email || '—')}</td><td>${esc(c.phone || '—')}</td>${canEdit ? `<td class="actions"><button class="btn secondary small" data-coedit="${esc(c.id)}">Edit</button><button class="btn secondary small" data-codel="${esc(c.id)}">Delete</button></td>` : ''}</tr>`).join('')}</tbody></table></div>` : empty('🧑‍🏫', 'No coaches found', 'Add a coach or change your search.');
+      $$('[data-coedit]').forEach(b => b.onclick = () => coachForm(coaches.find(c => c.id === b.dataset.coedit)));
+      $$('[data-codel]').forEach(b => b.onclick = async () => { if (confirm('Delete this coach?')) { try { await api('coaches/' + b.dataset.codel, { method: 'DELETE' }); toast('Deleted'); show('coaches'); } catch (e) { toast(e.message); } } });
+    };
+    const coachForm = c => {
+      const sel = new Set(c ? mine(c.id) : []);
+      const m = openModal(c ? 'Edit coach' : 'Add coach', `<form id="cof"><div class="form-grid"><label>Name<input name="name" required value="${esc(c?.name || '')}"></label><label>Email (used for their login)<input type="email" name="email" value="${esc(c?.email || '')}"></label><label>Phone<input type="tel" name="phone" value="${esc(c?.phone || '')}"></label>${c ? `<label class="check"><input type="checkbox" name="active" ${c.active === 0 ? '' : 'checked'}> Active</label>` : ''}</div><h4>Centers they coach at</h4><div class="roster-list">${centers.map(x => `<label class="roster-person"><input type="checkbox" name="center" value="${esc(x.id)}" ${sel.has(x.id) ? 'checked' : ''}><span><b>${esc(x.name)}</b></span></label>`).join('')}</div><p class="muted section-gap-sm">Missing a center? <a href="#" id="co-newcenter">Add a new center</a></p><div class="modal-actions"><button type="button" class="btn secondary" data-close>Cancel</button><button class="btn">Save coach</button></div></form>`, { wide: true });
+      m.$('#co-newcenter').onclick = async e => { e.preventDefault(); const name = prompt('New center name'); if (!name) return; try { const r = await api('centers', { method: 'POST', body: JSON.stringify({ name }) }); centers.push({ id: r.id, name }); m.$('.roster-list').insertAdjacentHTML('beforeend', `<label class="roster-person"><input type="checkbox" name="center" value="${esc(r.id)}" checked><span><b>${esc(name)}</b></span></label>`); toast('Center added'); } catch (err) { toast(err.message); } };
+      m.$('#cof').onsubmit = async e => {
+        e.preventDefault(); const f = new FormData(e.target), center_ids = f.getAll('center');
+        const body = { name: f.get('name'), email: f.get('email'), phone: f.get('phone'), center_id: center_ids[0] || '' };
+        if (c) body.active = f.get('active') ? 1 : 0;
+        try {
+          const r = await api('coaches' + (c ? '/' + c.id : ''), { method: c ? 'PUT' : 'POST', body: JSON.stringify(body) });
+          await api('coach-centers', { method: 'POST', body: JSON.stringify({ coach_id: c ? c.id : r.id, center_ids }) });
+          toast('Coach saved'); m.close(); show('coaches');
+        } catch (err) { toast(err.message); }
+      };
+    };
+    $('#cofilter').oninput = draw; $('#cocenter').onchange = draw; draw();
+    $('#add-coach') && ($('#add-coach').onclick = () => coachForm(null));
+    $$('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go));
+  };
+
+  /* ---------- centers ---------- */
+  PAGES.centers = async () => {
+    const list = await api('centers-summary');
+    $('#content').innerHTML = hero('Centers', 'Add a new center in one step. Students, batches, coaches and events can then use it.') +
+      `<form class="card" id="cenf"><div class="toolbar" style="margin:0"><input name="name" required maxlength="80" placeholder="New center name, e.g. New Jersey North" style="max-width:360px"><button class="btn">+ Add center</button></div></form>` +
+      `<div class="table-wrap section-gap"><table><thead><tr><th>Center</th><th>Students</th><th>Batches</th><th>Coaches</th><th>Actions</th></tr></thead><tbody>${list.map(c => `<tr><td><b>${esc(c.name)}</b></td><td>${c.students}</td><td>${c.batches}</td><td>${c.coaches}</td><td class="actions"><button class="btn secondary small" data-cren="${esc(c.id)}">Rename</button><button class="btn secondary small" data-cdel="${esc(c.id)}">Delete</button></td></tr>`).join('')}</tbody></table></div>`;
+    $('#cenf').onsubmit = async e => { e.preventDefault(); try { await api('centers', { method: 'POST', body: JSON.stringify({ name: e.target.elements.namedItem('name').value }) }); toast('Center added'); show('centers'); } catch (err) { toast(err.message); } };
+    $$('[data-cren]').forEach(b => b.onclick = async () => { const c = list.find(x => x.id === b.dataset.cren), name = prompt('Rename center', c.name); if (!name || name === c.name) return; try { await api('centers/' + c.id, { method: 'PUT', body: JSON.stringify({ name }) }); toast('Renamed'); show('centers'); } catch (e) { toast(e.message); } });
+    $$('[data-cdel]').forEach(b => b.onclick = async () => { if (!confirm('Delete this center?')) return; try { await api('centers/' + b.dataset.cdel, { method: 'DELETE' }); toast('Center deleted'); show('centers'); } catch (e) { toast(e.message); } });
+  };
+
+  /* ---------- timers: save the one-minute count as a student's dasrang ---------- */
+  PAGES.timers = async () => {
+    timers();
+    const students = (await api('students')).filter(s => s.active !== 0).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+    $('#content').insertAdjacentHTML('beforeend', `<form class="card section-gap" id="dsave" hidden><h3>Save this dasrang count</h3><p class="muted">Save the count to a student's fitness record. You can save it to more than one student.</p><div class="form-grid"><label>Student<input id="ds-search" list="ds-list" placeholder="Type a name..." autocomplete="off"><datalist id="ds-list">${students.map(s => `<option value="${esc(nameOf(s))}"></option>`).join('')}</datalist></label><label>Dasrang count<input type="number" id="ds-count" min="0" required></label><label>Date<input type="date" id="ds-date" value="${todayStr()}" required></label></div><div class="modal-actions"><button type="button" class="btn secondary" id="ds-skip">Don't save</button><button class="btn">Save count</button></div><p class="muted" id="ds-msg"></p></form>`);
+    const form = $('#dsave');
+    window.onRepTimerDone = count => { form.hidden = false; $('#ds-count').value = count; $('#ds-msg').textContent = ''; form.scrollIntoView({ behavior: 'smooth', block: 'center' }); $('#ds-search').focus(); };
+    window.onRepTimerReset = () => { form.hidden = true; };
+    $('#ds-skip').onclick = () => { form.hidden = true; };
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const s = students.find(x => nameOf(x).toLowerCase() === $('#ds-search').value.trim().toLowerCase());
+      if (!s) return toast('Pick a student from the list');
+      try { await api('fitness', { method: 'POST', body: JSON.stringify({ student_id: s.id, record_date: $('#ds-date').value, values: { dasrang_1min: $('#ds-count').value } }) }); $('#ds-msg').textContent = `Saved ${$('#ds-count').value} dasrang for ${nameOf(s)}.`; toast('Dasrang saved'); $('#ds-search').value = ''; }
+      catch (err) { toast(err.message); }
+    };
+  };
 
   /* ---------- parent portal additions ---------- */
   const _childCard = childCard;
