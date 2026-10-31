@@ -57,6 +57,7 @@ const COLUMNS = [
   ['parents', 'tour_done', 'INTEGER DEFAULT 0'],
   ['eval_participants', 'coach2_id', 'TEXT'],
   ['eval_reports', 'coach2_id', 'TEXT'],
+  ['eval_reports', 'updated_by', 'TEXT'],
   ['events', 'finalized_at', 'TEXT'],
   ['events', 'finalized_by', 'TEXT'],
   ['parents', 'phone', 'TEXT'],
