@@ -11,6 +11,8 @@ const str = (v, max = 2000) => String(v ?? '').trim().slice(0, max);
 const APPS = ['pole', 'rope', 'yoga'];
 const STAT = new Set(['present', 'absent', 'late', 'excused']);
 const METRIC = /^[a-z0-9_]{1,40}$/;
+// One-minute timed sets. Each tap's time is kept so the app can graph when a student slowed down.
+const REP_EXERCISES = new Set(['dasrang_1min', 'rope_climb_1min', 'pole_climb_1min', 'sadhi_adhi_1min']);
 const today = () => new Date().toISOString().slice(0, 10);
 export const adminEmail = env => cleanEmail(env.ADMIN_EMAIL || 'automallakhamb@gmail.com');
 const all = async (env, sql, ...b) => (await env.DB.prepare(sql).bind(...b).all()).results;
@@ -56,15 +58,16 @@ const changeLabel = r => r.outcome === 'passed' && r.target_level > (r.from_leve
 /* ---------- parent portal additions ---------- */
 export async function parentExtras(env, parent, children) {
   for (const c of children) {
-    const [notes, fitness, photos, scores, evals, demos] = await env.DB.batch([
+    const [notes, fitness, photos, scores, evals, demos, reps] = await env.DB.batch([
       env.DB.prepare('SELECT n.id,n.worked_on,n.next_steps,n.author_name,n.created_at,b.name AS batch FROM student_notes n LEFT JOIN batches b ON b.id=n.batch_id WHERE n.student_id=? ORDER BY n.created_at DESC LIMIT 20').bind(c.id),
       env.DB.prepare('SELECT record_date,metric,value FROM fitness_records WHERE student_id=? ORDER BY record_date DESC LIMIT 200').bind(c.id),
       env.DB.prepare('SELECT id,url,caption,taken_date,created_at FROM student_photos WHERE student_id=? ORDER BY COALESCE(taken_date,created_at) DESC LIMIT 60').bind(c.id),
       env.DB.prepare('SELECT cs.event_id,cs.apparatus,cs.score,e.title,e.event_date,(SELECT COUNT(*)+1 FROM comp_scores x WHERE x.event_id=cs.event_id AND x.apparatus=cs.apparatus AND x.score>cs.score) AS rank,(SELECT COUNT(*) FROM comp_scores x WHERE x.event_id=cs.event_id AND x.apparatus=cs.apparatus) AS total FROM comp_scores cs JOIN events e ON e.id=cs.event_id WHERE cs.student_id=? ORDER BY e.event_date DESC').bind(c.id),
       env.DB.prepare("SELECT r.apparatus,r.from_level,r.target_level,r.outcome,e.title,e.event_date,(SELECT COUNT(*) FROM eval_results x WHERE x.report_id=r.id AND x.result='pass') AS passed,(SELECT COUNT(*) FROM eval_results x WHERE x.report_id=r.id) AS tried FROM eval_reports r JOIN events e ON e.id=r.event_id WHERE r.student_id=? ORDER BY e.event_date DESC").bind(c.id),
-      env.DB.prepare('SELECT d.id,d.title,d.demo_date,d.start_time,d.end_time,d.arrive_time,d.location,d.details,ds.status FROM demo_students ds JOIN demos d ON d.id=ds.demo_id WHERE ds.student_id=? ORDER BY d.demo_date DESC').bind(c.id)
+      env.DB.prepare('SELECT d.id,d.title,d.demo_date,d.start_time,d.end_time,d.arrive_time,d.location,d.details,ds.status FROM demo_students ds JOIN demos d ON d.id=ds.demo_id WHERE ds.student_id=? ORDER BY d.demo_date DESC').bind(c.id),
+      env.DB.prepare('SELECT id,exercise,record_date,total,duration,taps,created_at FROM rep_sessions WHERE student_id=? ORDER BY record_date DESC,created_at DESC LIMIT 30').bind(c.id)
     ]);
-    Object.assign(c, { notes: notes.results, fitness: fitness.results, photos: photos.results, comp_scores: scores.results, evaluations: evals.results.map(r => ({ ...r, change: changeLabel(r) })), demos: demos.results });
+    Object.assign(c, { rep_sessions: reps.results.map(r => ({ ...r, taps: parseList(r.taps) })), notes: notes.results, fitness: fitness.results, photos: photos.results, comp_scores: scores.results, evaluations: evals.results.map(r => ({ ...r, change: changeLabel(r) })), demos: demos.results });
     c.coaches = (await coachesForStudent(env, c.id)).map(x => ({ id: x.id, name: x.name }));
   }
   const centers = [...new Set(children.map(c => c.center_id).filter(Boolean))];
@@ -350,6 +353,24 @@ export async function handleFeatures(path, method, request, env, url, actor) {
       catch (e) { return json({ error: e.message }, 400); }
     }
     if (method === 'DELETE' && id) { await env.DB.prepare('DELETE FROM fitness_records WHERE id=?').bind(id).run(); return json({ ok: true }); }
+  }
+  if (root === 'rep-sessions') {
+    if (method === 'GET') return json((await all(env, 'SELECT * FROM rep_sessions WHERE student_id=? ORDER BY record_date DESC,created_at DESC LIMIT 100', q('student_id') || '')).map(r => ({ ...r, taps: parseList(r.taps) })));
+    if (method === 'POST') {
+      if (!body?.student_id || !REP_EXERCISES.has(body.exercise) || !validDate(body.record_date)) return json({ error: 'A student, an exercise and a date are required.' }, 400);
+      const duration = 60, taps = (Array.isArray(body.taps) ? body.taps : []).map(Number).filter(n => Number.isFinite(n) && n >= 0 && n <= duration * 1000).sort((a, b) => a - b).slice(0, 1000).map(Math.round);
+      const total = body.total === undefined || body.total === '' ? taps.length : Number(body.total);
+      if (!Number.isInteger(total) || total < 0 || total > 1000) return json({ error: 'The count must be a whole number.' }, 400);
+      const rid = crypto.randomUUID();
+      const res = await env.DB.batch([
+        env.DB.prepare('INSERT INTO rep_sessions(id,student_id,exercise,record_date,total,duration,taps,added_by) SELECT ?,id,?,?,?,?,?,? FROM students WHERE id=?').bind(rid, body.exercise, body.record_date, total, duration, JSON.stringify(taps), by, body.student_id),
+        // The latest count also lands in fitness so it shows with the other results.
+        ...fitnessStmts(body.student_id, body.record_date, null, { [body.exercise]: total })
+      ]);
+      if (!res[0].meta.changes) return json({ error: 'Student not found.' }, 404);
+      return json({ ok: true, id: rid }, 201);
+    }
+    if (method === 'DELETE' && id) { await env.DB.prepare('DELETE FROM rep_sessions WHERE id=?').bind(id).run(); return json({ ok: true }); }
   }
   if (root === 'fitness-batch') {
     if (method === 'GET') {

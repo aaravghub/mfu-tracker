@@ -77,3 +77,19 @@
 .chat-notes{margin:8px 0 0;padding-left:18px;color:var(--muted);font-size:13px}
 .chat-actions{margin-top:6px}
 @media(max-width:600px){.modal .attach-grid{grid-template-columns:1fr}.eval-row{flex-direction:column;align-items:stretch}.eval-btns .eval-btn{flex:1}}
+
+/* one-minute pace chart (single series: reps per 5-second slice) */
+.rx-select{max-width:260px;margin:10px auto 0;display:block;text-align:center;font-weight:700}
+.pace{margin:6px 0 0}
+.pace svg{width:100%;height:auto;display:block;max-width:640px}
+.pace-grid{stroke:var(--line);stroke-width:1}
+.pace-axis{fill:var(--muted);font:11px 'DM Sans',sans-serif}
+.pace-bar path{fill:var(--orange)}
+.pace-bar:hover path{fill:#cf5310}
+:root[data-theme="dark"] .pace-bar:hover path{fill:#ff9a5e}
+.pace-drop{stroke:var(--muted);stroke-width:1.5;stroke-dasharray:4 3}
+.pace-sum{margin:6px 0;line-height:1.5}
+.pace-card{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:8px 0}
+.pace-table summary{cursor:pointer;font-size:12px;margin-top:4px}
+.pace-tip{position:fixed;z-index:50;pointer-events:none;background:var(--ink);color:var(--surface,#fff);font:600 12px 'DM Sans',sans-serif;padding:6px 9px;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+:root[data-theme="dark"] .pace-tip{background:#e9eef6;color:#172337}
