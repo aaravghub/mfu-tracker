@@ -7,7 +7,7 @@
   const APPS = ['pole', 'rope', 'yoga'];
   const cap = s => s ? s[0].toUpperCase() + s.slice(1) : '';
   const STAT = ['present', 'late', 'absent', 'excused'];
-  const METRICS = [['dasrang_1min', 'Dasrang in 1 min'], ['pushups', 'Push-ups'], ['situps', 'Sit-ups'], ['squats', 'Squats'], ['three_inch_hold', '3-inch hold (sec)'], ['plank', 'Plank (sec)'], ['pullups', 'Pull-ups']];
+  const METRICS = [['dasrang_1min', 'Dasrang in 1 min'], ['rope_climb_1min', 'Rope climbs in 1 min'], ['pole_climb_1min', 'Pole climbs in 1 min'], ['sadhi_adhi_1min', 'Sadhi Adhi in 1 min'], ['pushups', 'Push-ups'], ['situps', 'Sit-ups'], ['squats', 'Squats'], ['three_inch_hold', '3-inch hold (sec)'], ['plank', 'Plank (sec)'], ['pullups', 'Pull-ups']];
   const customMetrics = () => { try { return JSON.parse(localStorage.getItem('mfu-metrics') || '[]'); } catch { return []; } };
   const allMetrics = () => [...METRICS, ...customMetrics().filter(([k]) => !METRICS.some(m => m[0] === k))];
   const metricLabel = k => allMetrics().find(m => m[0] === k)?.[1] || k.replace(/_/g, ' ');
@@ -373,10 +373,11 @@
         m.$$('[data-ndel]').forEach(b => b.onclick = async () => { if (confirm('Delete this note?')) { try { await api('student-notes/' + b.dataset.ndel, { method: 'DELETE' }); views.notes(); } catch (e) { toast(e.message); } } });
       },
       fitness: async () => {
-        const rows = await api('fitness?student_id=' + encodeURIComponent(student.id));
+        const [rows, sets] = await Promise.all([api('fitness?student_id=' + encodeURIComponent(student.id)), api('rep-sessions?student_id=' + encodeURIComponent(student.id))]);
         const dates = [...new Set(rows.map(r => r.record_date))];
-        m.$('#spview').innerHTML = fitnessTiles(rows) + `<form id="ff" class="card soft-card section-gap"><h4>Add a result</h4><div class="form-grid"><label>Date<input type="date" name="record_date" value="${todayStr()}" required></label><label>Batch<select name="batch_id"><option value="">—</option>${batches.map(b => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('')}</select></label>${allMetrics().map(([k, l]) => `<label>${esc(l)}<input type="number" min="0" step="any" name="m_${esc(k)}"></label>`).join('')}</div><div class="modal-actions"><button class="btn">Save</button></div></form>` +
+        m.$('#spview').innerHTML = fitnessTiles(rows) + (sets.length ? `<h4>Timed sets</h4>${sessionsBlock(sets, true)}` : '') + `<form id="ff" class="card soft-card section-gap"><h4>Add a result</h4><div class="form-grid"><label>Date<input type="date" name="record_date" value="${todayStr()}" required></label><label>Batch<select name="batch_id"><option value="">—</option>${batches.map(b => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('')}</select></label>${allMetrics().map(([k, l]) => `<label>${esc(l)}<input type="number" min="0" step="any" name="m_${esc(k)}"></label>`).join('')}</div><div class="modal-actions"><button class="btn">Save</button></div></form>` +
           (dates.length ? `<div class="table-wrap section-gap"><table><thead><tr><th>Date</th>${[...new Set(rows.map(r => r.metric))].map(k => `<th>${esc(metricLabel(k))}</th>`).join('')}</tr></thead><tbody>${dates.map(dt => `<tr><td>${esc(fmtShort(dt))}</td>${[...new Set(rows.map(r => r.metric))].map(k => `<td>${rows.find(r => r.record_date === dt && r.metric === k)?.value ?? '—'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '<p class="muted section-gap">No fitness results yet.</p>');
+        m.$$('[data-rsdel]').forEach(b => b.onclick = async () => { if (confirm('Delete this timed set?')) { await api('rep-sessions/' + b.dataset.rsdel, { method: 'DELETE' }); views.fitness(); } });
         m.$('#ff').onsubmit = async e => { e.preventDefault(); const fd = Object.fromEntries(new FormData(e.target)); const values = {}; for (const [k, v] of Object.entries(fd)) if (k.startsWith('m_') && v !== '') values[k.slice(2)] = v; if (!Object.keys(values).length) return toast('Enter at least one number'); try { await api('fitness', { method: 'POST', body: JSON.stringify({ student_id: student.id, record_date: fd.record_date, batch_id: fd.batch_id, values }) }); toast('Saved'); views.fitness(); } catch (err) { toast(err.message); } };
       },
       photos: async () => {
@@ -568,21 +569,102 @@
     $$('[data-cdel]').forEach(b => b.onclick = async () => { if (!confirm('Delete this center?')) return; try { await api('centers/' + b.dataset.cdel, { method: 'DELETE' }); toast('Center deleted'); show('centers'); } catch (e) { toast(e.message); } });
   };
 
-  /* ---------- timers: save the one-minute count as a student's dasrang ---------- */
+  /* ---------- one-minute timed sets with a pace graph ---------- */
+  const EXERCISES = [['dasrang_1min', 'Dasrang'], ['rope_climb_1min', 'Rope climb up & down'], ['pole_climb_1min', 'Pole climb up & down'], ['sadhi_adhi_1min', 'Sadhi Adhi']];
+  const exName = k => EXERCISES.find(e => e[0] === k)?.[1] || metricLabel(k);
+  const SLICE = 5; // seconds per bar
+  // Reps in each 5-second slice, plus a plain-language read of where they slowed down.
+  function paceStats(taps, duration = 60) {
+    const n = Math.ceil(duration / SLICE), buckets = Array(n).fill(0);
+    taps.forEach(ms => { buckets[Math.min(n - 1, Math.floor(ms / 1000 / SLICE))]++; });
+    const q = Math.round(n / 4), first = buckets.slice(0, q).reduce((a, b) => a + b, 0), last = buckets.slice(-q).reduce((a, b) => a + b, 0);
+    const max = Math.max(...buckets), min = Math.min(...buckets);
+    const fast = buckets.indexOf(max), slow = buckets.lastIndexOf(min);
+    // first slice where the pace falls to under 75% of their best slice
+    const drop = buckets.findIndex((b, i) => i > fast && b < max * 0.75);
+    return { buckets, first, last, change: first ? Math.round((last - first) / first * 100) : 0, fast, slow, drop, max, q };
+  }
+  const sliceLabel = i => `${i * SLICE}–${(i + 1) * SLICE} s`;
+  function paceSummary(taps) {
+    if (taps.length < 4) return '';
+    const s = paceStats(taps), secs = s.q * SLICE;
+    const reps = n => n + (n === 1 ? ' rep' : ' reps');
+    const parts = [`Fastest: <b>${sliceLabel(s.fast)}</b> (${reps(s.max)})`, `slowest: <b>${sliceLabel(s.slow)}</b> (${reps(s.buckets[s.slow])})`];
+    let stamina = s.change <= -10 ? `They slowed down <b>${-s.change}%</b> from the first ${secs} s (${s.first} reps) to the last ${secs} s (${s.last} reps)${s.drop > 0 ? `, starting around <b>${s.drop * SLICE} s</b>` : ''}.` : s.change >= 10 ? `They got <b>faster</b> at the end: ${s.first} reps in the first ${secs} s, ${s.last} in the last ${secs} s.` : `Steady pace: ${s.first} reps in the first ${secs} s and ${s.last} in the last ${secs} s.`;
+    return `<p class="pace-sum">${parts.join(' · ')}. ${stamina}</p>`;
+  }
+  // Single-series bar chart: one bar per 5-second slice, height = reps in that slice.
+  function paceChart(taps, { duration = 60, title = '' } = {}) {
+    if (!taps.length) return '<p class="muted">No tap times were recorded for this set, so there is no graph.</p>';
+    const s = paceStats(taps, duration), W = 560, H = 200, L = 30, R = 8, T = 12, B = 28, pw = W - L - R, ph = H - T - B;
+    const top = Math.max(2, s.max + (s.max % 2)), step = top <= 6 ? 1 : top <= 12 ? 2 : 5, bw = pw / s.buckets.length, gap = 2;
+    const y = v => T + ph - (v / top) * ph;
+    let grid = '';
+    for (let v = 0; v <= top; v += step) grid += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" class="pace-grid"/><text x="${L - 6}" y="${y(v) + 4}" class="pace-axis" text-anchor="end">${v}</text>`;
+    const bars = s.buckets.map((v, i) => { const x = L + i * bw + gap / 2, w = bw - gap, h = Math.max(0, y(0) - y(v)), r = Math.min(4, w / 2, h);
+      const d = h ? `M${x},${y(0)} V${y(v) + r} Q${x},${y(v)} ${x + r},${y(v)} H${x + w - r} Q${x + w},${y(v)} ${x + w},${y(v) + r} V${y(0)} Z` : '';
+      return `<g class="pace-bar ${i === s.drop ? 'is-drop' : ''}" data-tip="${sliceLabel(i)}: ${v} rep${v === 1 ? '' : 's'}"><rect x="${L + i * bw}" y="${T}" width="${bw}" height="${ph}" fill="transparent"/>${d ? `<path d="${d}"/>` : ''}</g>`; }).join('');
+    const ticks = s.buckets.map((_, i) => i % 2 === 0 ? `<text x="${L + i * bw}" y="${H - 8}" class="pace-axis" text-anchor="${i ? 'middle' : 'start'}">${i * SLICE}s</text>` : '').join('') + `<text x="${W - R}" y="${H - 8}" class="pace-axis" text-anchor="end">${duration}s</text>`;
+    const drop = s.drop > 0 ? `<line x1="${L + s.drop * bw}" x2="${L + s.drop * bw}" y1="${T}" y2="${y(0)}" class="pace-drop"/><text x="${L + s.drop * bw + 4}" y="${T + 10}" class="pace-axis">slowing</text>` : '';
+    return `<figure class="pace"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc((title ? title + ': ' : '') + 'reps per ' + SLICE + ' seconds — ' + s.buckets.join(', '))}">${grid}${bars}${drop}${ticks}</svg><figcaption class="muted">Reps in each ${SLICE}-second slice${title ? ' · ' + esc(title) : ''}</figcaption><details class="pace-table"><summary class="muted">See the numbers</summary><div class="chips">${s.buckets.map((v, i) => `<span class="chip">${sliceLabel(i)}: ${v}</span>`).join('')}</div></details></figure>`;
+  }
+  // One tooltip for every pace chart on the page.
+  const tip = document.createElement('div'); tip.className = 'pace-tip'; tip.hidden = true; document.body.append(tip);
+  document.addEventListener('pointerover', e => { const g = e.target.closest?.('.pace-bar'); if (!g) { tip.hidden = true; return; } tip.textContent = g.dataset.tip; tip.hidden = false; });
+  document.addEventListener('pointermove', e => { if (!tip.hidden) { tip.style.left = Math.min(e.clientX + 12, innerWidth - 170) + 'px'; tip.style.top = e.clientY - 34 + 'px'; } });
+  const sessionCard = (r, del) => `<div class="pace-card"><div class="note-head"><b>${esc(exName(r.exercise))} · ${r.total} reps</b><small class="muted">${esc(fmtShort(r.record_date))}</small>${del ? `<button class="icon-btn" data-rsdel="${esc(r.id)}" aria-label="Delete set">✕</button>` : ''}</div>${paceSummary(r.taps)}${paceChart(r.taps, { title: exName(r.exercise) })}</div>`;
+  // Newest set per exercise in full, older ones folded away.
+  const sessionsBlock = (list, del) => {
+    if (!list?.length) return '';
+    const latest = EXERCISES.map(([k]) => list.find(r => r.exercise === k)).filter(Boolean), older = list.filter(r => !latest.includes(r));
+    return latest.map(r => sessionCard(r, del)).join('') + (older.length ? `<details><summary class="muted">Earlier timed sets (${older.length})</summary>${older.map(r => sessionCard(r, del)).join('')}</details>` : '');
+  };
+
   PAGES.timers = async () => {
     timers();
     const students = (await api('students')).filter(s => s.active !== 0).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
-    $('#content').insertAdjacentHTML('beforeend', `<form class="card section-gap" id="dsave" hidden><h3>Save this dasrang count</h3><p class="muted">Save the count to a student's fitness record. You can save it to more than one student.</p><div class="form-grid"><label>Student<input id="ds-search" list="ds-list" placeholder="Type a name..." autocomplete="off"><datalist id="ds-list">${students.map(s => `<option value="${esc(nameOf(s))}"></option>`).join('')}</datalist></label><label>Dasrang count<input type="number" id="ds-count" min="0" required></label><label>Date<input type="date" id="ds-date" value="${todayStr()}" required></label></div><div class="modal-actions"><button type="button" class="btn secondary" id="ds-skip">Don't save</button><button class="btn">Save count</button></div><p class="muted" id="ds-msg"></p></form>`);
-    const form = $('#dsave');
-    window.onRepTimerDone = count => { form.hidden = false; $('#ds-count').value = count; $('#ds-msg').textContent = ''; form.scrollIntoView({ behavior: 'smooth', block: 'center' }); $('#ds-search').focus(); };
-    window.onRepTimerReset = () => { form.hidden = true; };
-    $('#ds-skip').onclick = () => { form.hidden = true; };
-    form.onsubmit = async e => {
+    // Replace the old rep counter with one that records the time of every tap.
+    const old = $('#counter'), card = document.createElement('div');
+    card.className = 'timer-card counter'; card.id = 'counter';
+    card.innerHTML = `<div class="timer-label">One-minute timed set</div><select id="rx" aria-label="Exercise" class="rx-select">${EXERCISES.map(([k, l]) => `<option value="${k}" ${state.rx === k ? 'selected' : ''}>${l}</option>`).join('')}</select><div class="timer-display" id="t1">01:00</div><div class="count-value"><span id="count">0</span> reps</div><p class="timer-help">Tap this card (or press the space bar) every time they finish one.</p><div class="timer-actions"><button class="btn" id="start1">Start 1:00</button><button class="btn secondary" id="reset1">Reset</button></div>`;
+    old.replaceWith(card);
+    $('#content').insertAdjacentHTML('beforeend', `<div class="card section-gap" id="rx-result" hidden><h3 id="rx-title"></h3><div id="rx-chart"></div><form id="dsave" class="section-gap"><h4>Save this set</h4><div class="form-grid"><label>Student<input id="ds-search" list="ds-list" placeholder="Type a name..." autocomplete="off" required><datalist id="ds-list">${students.map(s => `<option value="${esc(nameOf(s))}"></option>`).join('')}</datalist></label><label>Count<input type="number" id="ds-count" min="0" required></label><label>Date<input type="date" id="ds-date" value="${todayStr()}" required></label></div><div class="modal-actions"><button type="button" class="btn secondary" id="ds-skip">Don't save</button><button class="btn">Save set</button></div><p class="muted" id="ds-msg"></p></form></div>`);
+    let taps = [], elapsed = 0, startedAt = 0, running = false, done = false, tick = null;
+    const ex = () => $('#rx').value, now = () => elapsed + (running ? performance.now() - startedAt : 0);
+    const paint = () => { const left = Math.min(60, Math.max(0, Math.ceil((60000 - now()) / 1000))); $('#t1').textContent = left === 60 ? '01:00' : '00:' + String(left).padStart(2, '0'); $('#count').textContent = taps.length; };
+    const finish = () => {
+      running = false; done = true; clearInterval(tick); elapsed = 60000; paint();
+      $('#start1').textContent = 'Finished'; $('#rx').disabled = false;
+      $('#rx-title').textContent = `${exName(ex())}: ${taps.length} reps`;
+      $('#rx-chart').innerHTML = paceSummary(taps) + paceChart(taps, { title: exName(ex()) });
+      $('#ds-count').value = taps.length; $('#ds-msg').textContent = '';
+      $('#rx-result').hidden = false; $('#rx-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      toast('Set complete: ' + taps.length + ' reps');
+    };
+    const reset = () => { clearInterval(tick); taps = []; elapsed = 0; running = false; done = false; $('#start1').textContent = 'Start 1:00'; $('#rx').disabled = false; $('#rx-result').hidden = true; paint(); };
+    const toggle = () => {
+      if (done) return;
+      if (running) { elapsed = now(); running = false; clearInterval(tick); $('#start1').textContent = 'Resume'; return; }
+      running = true; startedAt = performance.now(); $('#start1').textContent = 'Pause'; $('#rx').disabled = true;
+      tick = setInterval(() => { if (now() >= 60000) finish(); else paint(); }, 100);
+    };
+    const tap = () => { if (!running) return; const t = now(); if (t < 60000) { taps.push(Math.round(t)); paint(); } };
+    card.onclick = e => { if (!e.target.closest('button,select')) tap(); };
+    const onKey = e => { if (state.page !== 'timers') return document.removeEventListener('keydown', onKey); if (e.code === 'Space' && running && !e.target.closest('input,textarea,select,button')) { e.preventDefault(); tap(); } };
+    document.addEventListener('keydown', onKey);
+    $('#start1').onclick = toggle; $('#reset1').onclick = reset;
+    $('#rx').onchange = e => { state.rx = e.target.value; };
+    $('#ds-skip').onclick = () => { $('#rx-result').hidden = true; };
+    $('#dsave').onsubmit = async e => {
       e.preventDefault();
       const s = students.find(x => nameOf(x).toLowerCase() === $('#ds-search').value.trim().toLowerCase());
       if (!s) return toast('Pick a student from the list');
-      try { await api('fitness', { method: 'POST', body: JSON.stringify({ student_id: s.id, record_date: $('#ds-date').value, values: { dasrang_1min: $('#ds-count').value } }) }); $('#ds-msg').textContent = `Saved ${$('#ds-count').value} dasrang for ${nameOf(s)}.`; toast('Dasrang saved'); $('#ds-search').value = ''; }
-      catch (err) { toast(err.message); }
+      const count = Number($('#ds-count').value);
+      try {
+        // Keep the tap times only if the count wasn't changed by hand.
+        await api('rep-sessions', { method: 'POST', body: JSON.stringify({ student_id: s.id, exercise: ex(), record_date: $('#ds-date').value, total: count, taps: count === taps.length ? taps : [] }) });
+        $('#ds-msg').textContent = `Saved ${count} ${exName(ex())} reps for ${nameOf(s)} with the pace graph. Parents can see it in their portal.`; toast('Set saved'); $('#ds-search').value = '';
+      } catch (err) { toast(err.message); }
     };
   };
 
@@ -595,6 +677,7 @@
       (c.coaches?.length ? `<p class="muted">Coaches: ${c.coaches.map(x => esc(x.name)).join(', ')}</p>` : '') +
       (c.notes?.length ? `<h4>Coach notes <span class="muted">what they did and what's next</span></h4>${noteList(c.notes.slice(0, 3), false)}${c.notes.length > 3 ? `<details><summary class="muted">Older notes (${c.notes.length - 3})</summary>${noteList(c.notes.slice(3), false)}</details>` : ''}` : '') +
       (c.fitness?.length ? `<h4>Fitness</h4>${fitnessTiles(c.fitness)}` : '') +
+      (c.rep_sessions?.length ? `<h4>One-minute sets <span class="muted">see when they slowed down</span></h4>${sessionsBlock(c.rep_sessions, false)}` : '') +
       (c.evaluations?.length ? `<h4>Evaluations</h4><ul class="att-list">${c.evaluations.map(e => `<li><span>${esc(e.title)} · ${esc(fmtShort(e.event_date))} · ${cap(e.apparatus)} level ${e.target_level}<small class="muted"> · ${e.passed}/${e.tried} skills</small></span><span class="chip ${e.change === 'Increased' ? 'ok' : ''}">${e.change === 'Increased' ? '▲ Level ' + e.from_level + ' → ' + e.target_level : SL[e.outcome]}</span></li>`).join('')}</ul>` : '') +
       (c.comp_scores?.length ? `<h4>Competition scores</h4><ul class="att-list">${c.comp_scores.map(s => `<li><span>${esc(s.title)} · ${esc(fmtShort(s.event_date))} · ${cap(s.apparatus)}</span><span><b>${s.score}</b> <span class="chip ${s.rank <= 3 ? 'ok' : ''}">${s.rank <= 3 ? ['🥇', '🥈', '🥉'][s.rank - 1] + ' ' : ''}#${s.rank} of ${s.total}</span></span></li>`).join('')}</ul>` : '') +
       (c.demos?.length ? `<h4>Demos</h4><ul class="att-list">${c.demos.map(d => `<li><span>${esc(d.title)} · ${esc(fmtShort(d.demo_date))}${d.arrive_time ? ' · arrive by ' + esc(fmtTime(d.arrive_time)) : ''}${d.location ? ' · ' + esc(d.location) : ''}</span>${d.status ? `<span class="chip s-${esc(d.status)}">${esc(d.status)}</span>` : d.demo_date >= todayStr() ? '<span class="chip">Going</span>' : ''}</li>`).join('')}</ul>` : '') +
