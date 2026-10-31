@@ -20,12 +20,18 @@ const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS demo_routines (id TEXT PRIMARY KEY, demo_id TEXT NOT NULL REFERENCES demos(id) ON DELETE CASCADE, title TEXT NOT NULL, apparatus TEXT DEFAULT 'group', content TEXT DEFAULT '', video_url TEXT, student_ids TEXT DEFAULT '[]', sort_order INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS eval_participants (event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE, student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE, coach_id TEXT REFERENCES coaches(id) ON DELETE SET NULL, status TEXT, PRIMARY KEY(event_id,student_id))`,
   `CREATE TABLE IF NOT EXISTS eval_reports (id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE, student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE, apparatus TEXT NOT NULL, from_level INTEGER, target_level INTEGER NOT NULL, coach_id TEXT REFERENCES coaches(id) ON DELETE SET NULL, outcome TEXT NOT NULL DEFAULT 'not_passed', notes TEXT DEFAULT '', updated_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(event_id,student_id,apparatus))`,
-  `CREATE TABLE IF NOT EXISTS eval_results (report_id TEXT NOT NULL REFERENCES eval_reports(id) ON DELETE CASCADE, skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE, result TEXT NOT NULL CHECK(result IN ('pass','fail')), PRIMARY KEY(report_id,skill_id))`,
+  `CREATE TABLE IF NOT EXISTS eval_results (report_id TEXT NOT NULL REFERENCES eval_reports(id) ON DELETE CASCADE, skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE, result TEXT NOT NULL CHECK(result IN ('pass','partial','fail')), PRIMARY KEY(report_id,skill_id))`,
   `CREATE TABLE IF NOT EXISTS comp_scores (event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE, student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE, apparatus TEXT NOT NULL CHECK(apparatus IN ('pole','rope')), score REAL NOT NULL, PRIMARY KEY(event_id,student_id,apparatus))`,
   `CREATE TABLE IF NOT EXISTS student_photos (id TEXT PRIMARY KEY, student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE, url TEXT NOT NULL, caption TEXT DEFAULT '', taken_date TEXT, added_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS student_notes (id TEXT PRIMARY KEY, student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE, batch_id TEXT REFERENCES batches(id) ON DELETE SET NULL, worked_on TEXT DEFAULT '', next_steps TEXT DEFAULT '', author_name TEXT, coach_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS fitness_records (id TEXT PRIMARY KEY, student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE, batch_id TEXT REFERENCES batches(id) ON DELETE SET NULL, record_date TEXT NOT NULL, metric TEXT NOT NULL, value REAL NOT NULL, added_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(student_id,record_date,metric))`,
   `CREATE TABLE IF NOT EXISTS rep_sessions (id TEXT PRIMARY KEY, student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE, exercise TEXT NOT NULL, record_date TEXT NOT NULL, total INTEGER NOT NULL, duration INTEGER NOT NULL DEFAULT 60, taps TEXT DEFAULT '[]', added_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE TABLE IF NOT EXISTS exercises (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT DEFAULT 'Core', level INTEGER, description TEXT DEFAULT '', video_url TEXT, default_reps TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE TABLE IF NOT EXISTS exercise_sets (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT DEFAULT 'Core', level INTEGER, description TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE TABLE IF NOT EXISTS set_items (set_id TEXT NOT NULL REFERENCES exercise_sets(id) ON DELETE CASCADE, exercise_id TEXT NOT NULL REFERENCES exercises(id) ON DELETE CASCADE, reps TEXT DEFAULT '', sort_order INTEGER DEFAULT 0, PRIMARY KEY(set_id,exercise_id))`,
+  `CREATE TABLE IF NOT EXISTS home_assignments (id TEXT PRIMARY KEY, student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE, set_id TEXT REFERENCES exercise_sets(id) ON DELETE CASCADE, exercise_id TEXT REFERENCES exercises(id) ON DELETE CASCADE, reps TEXT DEFAULT '', note TEXT DEFAULT '', frequency TEXT DEFAULT 'Daily', until_date TEXT, assigned_by TEXT, active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE TABLE IF NOT EXISTS home_checkins (assignment_id TEXT NOT NULL REFERENCES home_assignments(id) ON DELETE CASCADE, done_date TEXT NOT NULL, PRIMARY KEY(assignment_id,done_date))`,
+  `CREATE TABLE IF NOT EXISTS request_files (id TEXT PRIMARY KEY, request_id TEXT NOT NULL REFERENCES parent_requests(id) ON DELETE CASCADE, name TEXT NOT NULL, type TEXT, size INTEGER, data BLOB NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS parent_requests (id TEXT PRIMARY KEY, parent_id TEXT NOT NULL REFERENCES parents(id) ON DELETE CASCADE, student_id TEXT REFERENCES students(id) ON DELETE SET NULL, kind TEXT NOT NULL CHECK(kind IN ('meeting','question')), subject TEXT NOT NULL, message TEXT DEFAULT '', preferred_times TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'open', reply TEXT, replied_by TEXT, replied_at TEXT, meeting_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS announcements (id TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT DEFAULT '', audience TEXT NOT NULL DEFAULT 'all' CHECK(audience IN ('all','parents','coaches')), center_id TEXT, pinned INTEGER DEFAULT 0, created_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`
 ];
@@ -38,6 +44,7 @@ const COLUMNS = [
   ['events', 'sheet_id', 'TEXT'],
   ['events', 'sheet_url', 'TEXT'],
   ['sessions', 'parent_id', 'TEXT'],
+  ['sessions', 'last_seen', 'INTEGER'],
   ['student_attendance', 'drop_in', 'INTEGER DEFAULT 0'],
   ['student_skill_progress', 'started_date', 'TEXT'],
   ['student_skill_progress', 'mastered_date', 'TEXT'],
@@ -46,7 +53,9 @@ const COLUMNS = [
   ['coaches', 'last_login', 'TEXT'],
   ['coaches', 'invited_at', 'TEXT'],
   ['coaches', 'tour_done', 'INTEGER DEFAULT 0'],
-  ['parents', 'tour_done', 'INTEGER DEFAULT 0']
+  ['parents', 'tour_done', 'INTEGER DEFAULT 0'],
+  ['eval_participants', 'coach2_id', 'TEXT'],
+  ['eval_reports', 'coach2_id', 'TEXT']
 ];
 
 // The original sessions table only allowed admin and parent roles. Rebuild it once so coach sessions fit, keeping everyone signed in.
@@ -63,15 +72,29 @@ async function upgradeSessions(env) {
   ]);
 }
 
+// Evaluation results first allowed only pass/fail. Rebuild once to allow "partial", keeping every saved result.
+async function upgradeEvalResults(env) {
+  const row = await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='eval_results'").first();
+  if (!row || /partial/.test(row.sql)) return;
+  await env.DB.batch([
+    env.DB.prepare('DROP TABLE IF EXISTS eval_results_v2'),
+    env.DB.prepare("CREATE TABLE eval_results_v2 (report_id TEXT NOT NULL REFERENCES eval_reports(id) ON DELETE CASCADE, skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE, result TEXT NOT NULL CHECK(result IN ('pass','partial','fail')), PRIMARY KEY(report_id,skill_id))"),
+    env.DB.prepare('INSERT INTO eval_results_v2(report_id,skill_id,result) SELECT report_id,skill_id,result FROM eval_results'),
+    env.DB.prepare('DROP TABLE eval_results'),
+    env.DB.prepare('ALTER TABLE eval_results_v2 RENAME TO eval_results')
+  ]);
+}
+
 export function ensureSchema(env) {
   if (!ready) {
     ready = (async () => {
       for (const sql of STATEMENTS) await env.DB.prepare(sql).run();
+      await upgradeSessions(env);
       for (const [table, col, def] of COLUMNS) {
         const have = (await env.DB.prepare(`PRAGMA table_info(${table})`).all()).results.map(r => r.name);
         if (have.length && !have.includes(col)) await env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`).run();
       }
-      await upgradeSessions(env);
+      await upgradeEvalResults(env);
     })().catch(e => { ready = null; throw e; });
   }
   return ready;

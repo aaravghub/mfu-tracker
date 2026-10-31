@@ -35,6 +35,16 @@ export async function checkPassword(password, salt, hash) {
   return timingSafeEqual(await pbkdf2(password, salt), hash);
 }
 
+// Password rules for parent and coach accounts. Returns a message, or '' when the password is fine.
+export function passwordProblem(pw, email = '') {
+  if (typeof pw !== 'string' || pw.length < 8) return 'Use at least 8 characters.';
+  if (pw.length > 128) return 'Use 128 characters or fewer.';
+  if (!/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) return 'Use at least one letter and one number.';
+  if (/^(.)\1+$/.test(pw) || /^(password|12345678|qwerty)/i.test(pw)) return 'That password is too easy to guess.';
+  if (email && pw.toLowerCase().includes(String(email).split('@')[0].toLowerCase()) && String(email).split('@')[0].length >= 4) return 'Don\'t use your email name in the password.';
+  return '';
+}
+
 export const isHttpUrl = v => {
   if (typeof v !== 'string') return false;
   try { const u = new URL(v); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; }

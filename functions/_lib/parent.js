@@ -1,4 +1,4 @@
-import { json, cleanEmail, isEmail, checkPassword, makePassword, sha256, randomHex, isBlocked, recordFail, clearFails, clientKey } from './util.js';
+import { json, cleanEmail, isEmail, checkPassword, makePassword, sha256, randomHex, isBlocked, recordFail, clearFails, clientKey, passwordProblem } from './util.js';
 import { getSession, startSession, endSession } from './auth.js';
 import { mailConfigured, sendMessages, siteUrl, wrap } from './mail.js';
 import { esc } from './util.js';
@@ -81,10 +81,11 @@ export async function handleParent(path, method, request, env) {
 
   if (sub === 'set-password' && method === 'POST') {
     const pw = body.password;
-    if (typeof body.token !== 'string' || typeof pw !== 'string' || pw.length < 8 || pw.length > 200) return json({ error: 'Choose a password with at least 8 characters.' }, 400);
+    if (typeof body.token !== 'string') return json({ error: 'This link is not valid.' }, 400);
     const th = await sha256(body.token);
-    const row = await env.DB.prepare('SELECT parent_id,expires_at FROM password_tokens WHERE token_hash=?').bind(th).first();
+    const row = await env.DB.prepare('SELECT t.parent_id,t.expires_at,p.email FROM password_tokens t JOIN parents p ON p.id=t.parent_id WHERE t.token_hash=?').bind(th).first();
     if (!row || row.expires_at < Math.floor(Date.now() / 1000)) return json({ error: 'This link has expired. Ask for a new one from the sign-in page.' }, 400);
+    { const bad = passwordProblem(pw, row.email); if (bad) return json({ error: bad }, 400); }
     const { salt, hash } = await makePassword(pw);
     await env.DB.batch([
       env.DB.prepare('UPDATE parents SET password_hash=?,password_salt=?,last_login=datetime(\'now\') WHERE id=?').bind(hash, salt, row.parent_id),
@@ -103,7 +104,7 @@ export async function handleParent(path, method, request, env) {
   if (sub === 'password' && method === 'POST') {
     const cur = await env.DB.prepare('SELECT password_hash,password_salt FROM parents WHERE id=?').bind(parent.id).first();
     if (!(await checkPassword(String(body.current || ''), cur.password_salt, cur.password_hash))) return json({ error: 'Your current password is incorrect.' }, 400);
-    if (typeof body.password !== 'string' || body.password.length < 8 || body.password.length > 200) return json({ error: 'New password must be at least 8 characters.' }, 400);
+    { const bad = passwordProblem(body.password, parent.email); if (bad) return json({ error: bad }, 400); }
     const { salt, hash } = await makePassword(body.password);
     await env.DB.prepare('UPDATE parents SET password_hash=?,password_salt=? WHERE id=?').bind(hash, salt, parent.id).run();
     return json({ ok: true });
