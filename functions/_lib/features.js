@@ -1,6 +1,6 @@
 import { json, cleanEmail, isEmail, isHttpUrl, esc } from './util.js';
 import { mailConfigured, sendMessages, siteUrl, wrap } from './mail.js';
-import { createMeetEvent, deleteCalendarEvent, writeSpreadsheet } from './google.js';
+import { createMeetEvent, deleteCalendarEvent, writeSpreadsheet, shareFile } from './google.js';
 import { recipientsFor } from './admin-extra.js';
 import { studentDetail } from './parent.js';
 import { practiceFor, decodeFiles, fileStatements, filesFor, fileResponse, parentCheckin } from './practice.js';
@@ -280,7 +280,7 @@ export async function handleFeatures(path, method, request, env, url, actor) {
   // ---- evaluations: participants, assigned evaluator, attendance, per-skill reports, summary, Google Sheet ----
   if (root === 'evaluations' && id) {
     if (method === 'GET' && !action) { const d = await evalData(env, id); return d ? json(d) : json({ error: 'Not found' }, 404); }
-    const event = await one(env, 'SELECT id,title,event_date,event_type,sheet_id,finalized_at FROM events WHERE id=?', id);
+    const event = await one(env, 'SELECT id,title,event_date,event_type,sheet_id,sheet_shared,finalized_at FROM events WHERE id=?', id);
     if (!event) return json({ error: 'Evaluation not found.' }, 404);
     if (method === 'POST' && action === 'participants') {
       // Only adds/updates the students sent and removes the ones listed, so two laptops adding kids never wipe each other out.
@@ -376,8 +376,16 @@ export async function handleFeatures(path, method, request, env, url, actor) {
       for (const r of d.reports) for (const x of r.results) skills.push([r.first_name + ' ' + r.last_name, r.apparatus, x.level, x.name, ({ pass: 'Did it', partial: 'Partly', fail: 'Failed' })[x.result]]);
       try {
         const sheet = await writeSpreadsheet(env, { sheetId: event.sheet_id, title: `MFU evaluation · ${event.title} · ${event.event_date}`, tabs: [{ name: 'Summary', rows: summary }, { name: 'Skills', rows: skills }] });
-        await env.DB.prepare('UPDATE events SET sheet_id=?,sheet_url=? WHERE id=?').bind(sheet.id, sheet.url, id).run();
-        return json({ ok: true, url: sheet.url });
+        // Every active coach (and ADMIN_EMAIL, if set) can open the sheet; the Google account that saves it already owns it. Only people not shared with yet are added, and a new sheet starts fresh.
+        const already = new Set(sheet.id === event.sheet_id ? parseList(event.sheet_shared) : []);
+        const people = [...new Set([...(env.ADMIN_EMAIL ? [adminEmail(env)] : []), ...(await all(env, "SELECT email FROM coaches WHERE COALESCE(active,1)=1 AND email IS NOT NULL AND TRIM(email)<>''")).map(c => cleanEmail(c.email))].filter(isEmail))];
+        let shared = 0, failed = [];
+        for (const email of people.filter(e => !already.has(e))) {
+          const r = await shareFile(env, sheet.id, email).catch(e => ({ ok: false, error: e.message }));
+          if (r.ok) { already.add(email); shared++; } else failed.push(email);
+        }
+        await env.DB.prepare('UPDATE events SET sheet_id=?,sheet_url=?,sheet_shared=? WHERE id=?').bind(sheet.id, sheet.url, JSON.stringify([...already]), id).run();
+        return json({ ok: true, url: sheet.url, shared, shared_total: already.size, not_shared: failed });
       } catch (e) { return json({ error: e.message }, 502); }
     }
   }
