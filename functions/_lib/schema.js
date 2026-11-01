@@ -68,6 +68,12 @@ const COLUMNS = [
   ['parents', 'emergency_phone', 'TEXT'],
   ['students', 'age', 'INTEGER'],
   ['coaches', 'age', 'INTEGER'],
+  ['students', 'dob', 'TEXT'],
+  ['signups', 'dob', 'TEXT'],
+  ['signups', 'gender', 'TEXT'],
+  ['students', 'gender', 'TEXT'],
+  ['coaches', 'dob', 'TEXT'],
+  ['coaches', 'gender', 'TEXT'],
   ['announcements', 'form_id', 'TEXT']
 ];
 

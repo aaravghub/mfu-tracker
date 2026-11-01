@@ -109,10 +109,10 @@ nav button[data-page]{display:flex;align-items:center;gap:10px}
 .signup-form fieldset{border:1px solid var(--line);border-radius:14px;padding:10px 12px 12px;display:grid;gap:10px;margin:0}
 .signup-form legend{font-weight:800;font-size:12px;padding:0 6px}
 .signup-form .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.kid-row{display:grid;grid-template-columns:1fr 1fr 70px 28px;gap:8px;align-items:end}
+.kid-row{display:grid;grid-template-columns:1fr 1fr 150px 110px 28px;gap:8px;align-items:end;padding:6px 0;border-bottom:1px dashed var(--line)}
 .signup-form small{font-weight:500}
 .signup-link{margin-top:4px}
-@media(max-width:480px){.kid-row{grid-template-columns:1fr 1fr}.signup-form .two{grid-template-columns:1fr}}
+@media(max-width:620px){.kid-row{grid-template-columns:1fr 1fr}.signup-form .two{grid-template-columns:1fr}}
 
 /* forms */
 .form-card{margin-bottom:12px}.form-card h3{margin:8px 0 4px}

@@ -20,7 +20,7 @@ async function emailCoachLink(env, coach, link, reset) {
     subject: reset ? 'Reset your MFU coach password' : 'Your MFU coach account',
     html: wrap(`<p style="margin:0 0 14px">${esc(hi)}</p><p style="margin:0 0 18px;line-height:1.55">${esc(lead)}</p><p style="margin:0 0 18px"><a href="${esc(link)}" style="display:inline-block;background:#f26b21;color:#fff;text-decoration:none;font-weight:700;padding:11px 18px;border-radius:8px">Set my password</a></p><p style="color:#536075;font-size:13px;margin:0">This link works for 7 days. Sign in on the Coach tab with this email address afterwards.</p>`),
     text: `${hi}\n\n${lead}\n\nSet your password: ${link}\n\nThis link works for 7 days.`
-  }]);
+  }], { cc: false });
 }
 
 const findCoach = (env, email) => env.DB.prepare('SELECT id,name,email,password_hash,password_salt,active FROM coaches WHERE lower(email)=? ORDER BY (password_hash IS NULL),rowid LIMIT 1').bind(email).first();
