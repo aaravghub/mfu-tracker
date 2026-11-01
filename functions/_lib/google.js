@@ -49,6 +49,17 @@ export async function deleteCalendarEvent(env, eventId) {
   catch { return false; }
 }
 
+// Gives one person access to a file the app created. Google accounts get access quietly (they open it from MFU Tracker);
+// an email that isn't a Google account needs Google's invitation email, so that is retried with the notification on.
+export async function shareFile(env, fileId, email, role = 'reader') {
+  const send = notify => call(env, `https://www.googleapis.com/drive/v3/files/${fileId}/permissions?sendNotificationEmail=${notify}&supportsAllDrives=true`, { method: 'POST', body: JSON.stringify({ type: 'user', role, emailAddress: email }) });
+  try { await send(false); return { ok: true }; }
+  catch (e) {
+    if (/Google needs permission/.test(e.message)) throw e;
+    try { await send(true); return { ok: true, invited: true }; } catch (e2) { return { ok: false, error: e2.message }; }
+  }
+}
+
 // Writes tabs of rows into a spreadsheet, creating it the first time. Returns { id, url }.
 export async function writeSpreadsheet(env, { sheetId, title, tabs }) {
   const create = async () => {
