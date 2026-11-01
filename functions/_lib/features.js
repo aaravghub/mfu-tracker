@@ -44,14 +44,18 @@ const parseList = v => { try { const a = JSON.parse(v || '[]'); return Array.isA
 async function evalData(env, eventId) {
   const event = await one(env, 'SELECT * FROM events WHERE id=?', eventId);
   if (!event) return null;
-  const [participants, reports, results] = await env.DB.batch([
+  const [participants, reports, results, assigned] = await env.DB.batch([
     env.DB.prepare('SELECT ep.student_id,ep.coach_id,ep.coach2_id,ep.status,s.first_name,s.last_name,s.center_id,s.pole_level,s.rope_level,s.yoga_level,c.name AS coach_name,c2.name AS coach2_name FROM eval_participants ep JOIN students s ON s.id=ep.student_id LEFT JOIN coaches c ON c.id=ep.coach_id LEFT JOIN coaches c2 ON c2.id=ep.coach2_id WHERE ep.event_id=? ORDER BY s.last_name,s.first_name').bind(eventId),
     env.DB.prepare('SELECT r.*,s.first_name,s.last_name,s.center_id,s.pole_level,s.rope_level,s.yoga_level,c.name AS coach_name,c2.name AS coach2_name FROM eval_reports r JOIN students s ON s.id=r.student_id LEFT JOIN coaches c ON c.id=r.coach_id LEFT JOIN coaches c2 ON c2.id=r.coach2_id WHERE r.event_id=? ORDER BY s.last_name,s.first_name,r.apparatus').bind(eventId),
-    env.DB.prepare('SELECT er.report_id,er.skill_id,er.result,sk.name,sk.level FROM eval_results er JOIN eval_reports r ON r.id=er.report_id JOIN skills sk ON sk.id=er.skill_id WHERE r.event_id=? ORDER BY sk.level,sk.sort_order,sk.name').bind(eventId)
+    env.DB.prepare('SELECT er.report_id,er.skill_id,er.result,sk.name,sk.level FROM eval_results er JOIN eval_reports r ON r.id=er.report_id JOIN skills sk ON sk.id=er.skill_id WHERE r.event_id=? ORDER BY sk.level,sk.sort_order,sk.name').bind(eventId),
+    env.DB.prepare('SELECT ev.*,c.name AS coach_name,c2.name AS coach2_name FROM eval_evaluators ev LEFT JOIN coaches c ON c.id=ev.coach_id LEFT JOIN coaches c2 ON c2.id=ev.coach2_id WHERE ev.event_id=?').bind(eventId)
   ]);
+  // Each student has a primary and a second evaluator for pole, rope and yoga. Older evaluations only had one pair for everything.
+  const pairs = p => Object.fromEntries(APPS.map(a => { const x = assigned.results.find(v => v.student_id === p.student_id && v.apparatus === a);
+    return [a, x ? { coach_id: x.coach_id, coach2_id: x.coach2_id, coach_name: x.coach_name, coach2_name: x.coach2_name, skip: !!x.skip } : { coach_id: p.coach_id, coach2_id: p.coach2_id, coach_name: p.coach_name, coach2_name: p.coach2_name, skip: false }]; }));
   return {
     event,
-    participants: participants.results,
+    participants: participants.results.map(p => ({ ...p, evaluators: pairs(p) })),
     reports: reports.results.map(r => ({ ...r, current_level: r[r.apparatus + '_level'], results: results.results.filter(x => x.report_id === r.id) }))
   };
 }
@@ -286,9 +290,19 @@ export async function handleFeatures(path, method, request, env, url, actor) {
       // Only adds/updates the students sent and removes the ones listed, so two laptops adding kids never wipe each other out.
       const list = (body?.participants || []).filter(p => p && typeof p.student_id === 'string');
       const remove = (body?.remove || []).filter(x => typeof x === 'string');
+      // Every student needs a primary and a second evaluator for each apparatus they're evaluated on.
+      for (const p of list) if (p.evaluators) for (const a of APPS) {
+        const e = p.evaluators[a] || {};
+        if (!e.skip && (!e.coach_id || !e.coach2_id)) return json({ error: `Every student needs a primary and a second evaluator for ${a} (or mark ${a} as not evaluated).` }, 400);
+        if (!e.skip && e.coach_id === e.coach2_id) return json({ error: `The primary and second evaluator for ${a} must be different coaches.` }, 400);
+      }
+      for (const p of list) if (p.evaluators) { const first = APPS.map(a => p.evaluators[a]).find(e => e && !e.skip) || {}; p.coach_id = first.coach_id; p.coach2_id = first.coach2_id; }
+      const pairStmts = list.filter(p => p.evaluators).flatMap(p => APPS.map(a => { const e = p.evaluators[a] || {};
+        return env.DB.prepare('INSERT INTO eval_evaluators(event_id,student_id,apparatus,coach_id,coach2_id,skip) SELECT ?,id,?,?,?,? FROM students WHERE id=? ON CONFLICT(event_id,student_id,apparatus) DO UPDATE SET coach_id=excluded.coach_id,coach2_id=excluded.coach2_id,skip=excluded.skip').bind(id, a, e.skip ? null : e.coach_id, e.skip ? null : e.coach2_id, e.skip ? 1 : 0, p.student_id); }));
       const st = list.map(p => env.DB.prepare('INSERT INTO eval_participants(event_id,student_id,coach_id,coach2_id) SELECT ?,id,?,? FROM students WHERE id=? ON CONFLICT(event_id,student_id) DO UPDATE SET coach_id=excluded.coach_id,coach2_id=excluded.coach2_id').bind(id, p.coach_id || null, p.coach2_id && p.coach2_id !== p.coach_id ? p.coach2_id : null, p.student_id));
-      for (const sid of remove) st.push(env.DB.prepare('DELETE FROM eval_participants WHERE event_id=? AND student_id=?').bind(id, sid));
-      if (st.length) await env.DB.batch(st);
+      for (const sid of remove) st.push(env.DB.prepare('DELETE FROM eval_participants WHERE event_id=? AND student_id=?').bind(id, sid), env.DB.prepare('DELETE FROM eval_evaluators WHERE event_id=? AND student_id=?').bind(id, sid));
+      st.push(...pairStmts);
+      for (let i = 0; i < st.length; i += 90) await env.DB.batch(st.slice(i, i + 90));
       return json({ ok: true, added: list.length, removed: remove.length });
     }
     if (method === 'POST' && action === 'attendance') {
@@ -301,8 +315,9 @@ export async function handleFeatures(path, method, request, env, url, actor) {
       const app = body?.apparatus, target = Number(body?.target_level), outcome = body?.outcome === 'passed' ? 'passed' : 'not_passed';
       if (!APPS.includes(app) || !Number.isInteger(target) || target < 1 || target > 5) return json({ error: 'Choose an apparatus and a level from 1 to 5.' }, 400);
       if (event.finalized_at) return json({ error: 'This evaluation is finalized. Reopen it first to change results.' }, 400);
-      if (!body.coach_id) return json({ error: 'Choose an evaluator for this student before saving.' }, 400);
-      const coach2 = body.coach2_id && body.coach2_id !== body.coach_id ? body.coach2_id : null;
+      if (!body.coach_id || !body.coach2_id) return json({ error: 'Choose a primary and a second evaluator before saving.' }, 400);
+      if (body.coach_id === body.coach2_id) return json({ error: 'The primary and second evaluator must be different coaches.' }, 400);
+      const coach2 = body.coach2_id;
       const student = await one(env, 'SELECT id,first_name,last_name,pole_level,rope_level,yoga_level FROM students WHERE id=?', body.student_id);
       if (!student) return json({ error: 'Student not found.' }, 404);
       const results = (body.results || []).filter(r => r && typeof r.skill_id === 'string' && ['pass', 'partial', 'fail'].includes(r.result));
@@ -315,7 +330,8 @@ export async function handleFeatures(path, method, request, env, url, actor) {
           .bind(rid, id, student.id, app, fromLevel, target, body.coach_id, coach2, outcome, str(body.notes, 2000), by),
         env.DB.prepare('DELETE FROM eval_results WHERE report_id=?').bind(rid),
         ...results.map(r => env.DB.prepare('INSERT OR IGNORE INTO eval_results(report_id,skill_id,result) SELECT ?,id,? FROM skills WHERE id=?').bind(rid, r.result, r.skill_id)),
-        env.DB.prepare('INSERT OR IGNORE INTO eval_participants(event_id,student_id,coach_id,coach2_id) VALUES(?,?,?,?)').bind(id, student.id, body.coach_id, coach2)
+        env.DB.prepare('INSERT OR IGNORE INTO eval_participants(event_id,student_id,coach_id,coach2_id) VALUES(?,?,?,?)').bind(id, student.id, body.coach_id, coach2),
+        env.DB.prepare('INSERT INTO eval_evaluators(event_id,student_id,apparatus,coach_id,coach2_id,skip) VALUES(?,?,?,?,?,0) ON CONFLICT(event_id,student_id,apparatus) DO UPDATE SET coach_id=excluded.coach_id,coach2_id=excluded.coach2_id,skip=0').bind(id, student.id, app, body.coach_id, coach2)
       ];
       await env.DB.batch(st);
       // Levels, skills and parent emails all wait for "Finalize evaluation".
@@ -372,10 +388,12 @@ export async function handleFeatures(path, method, request, env, url, actor) {
       const summary = [['Student', 'Apparatus', 'Evaluated by', 'Second evaluator', 'Level before', 'Level tried', 'Result', 'Level now', 'Change', 'Skills passed', 'Skills partly done', 'Skills failed', '# passed', '# partly', '# failed', 'Attendance', 'Notes']];
       for (const r of d.reports) summary.push([r.first_name + ' ' + r.last_name, r.apparatus, r.coach_name || '', r.coach2_name || '', r.from_level ?? '', r.target_level, r.outcome === 'passed' ? 'Passed' : 'Not passed', r.current_level, changeLabel(r), r.results.filter(x => x.result === 'pass').map(x => x.name).join(', '), r.results.filter(x => x.result === 'partial').map(x => x.name).join(', '), r.results.filter(x => x.result === 'fail').map(x => x.name).join(', '), r.results.filter(x => x.result === 'pass').length, r.results.filter(x => x.result === 'partial').length, r.results.filter(x => x.result === 'fail').length, att.get(r.student_id)?.status || '', r.notes || '']);
       for (const p of d.participants) if (!d.reports.some(r => r.student_id === p.student_id)) summary.push([p.first_name + ' ' + p.last_name, '', p.coach_name || '', p.coach2_name || '', '', '', 'No report yet', '', '', '', '', '', '', '', '', p.status || '', '']);
+      const evaluators = [['Student', 'Pole primary', 'Pole second', 'Rope primary', 'Rope second', 'Yoga primary', 'Yoga second']];
+      for (const p of d.participants) evaluators.push([p.first_name + ' ' + p.last_name, ...APPS.flatMap(a => { const e = p.evaluators[a]; return e.skip ? ['Not evaluated', 'Not evaluated'] : [e.coach_name || '', e.coach2_name || '']; })]);
       const skills = [['Student', 'Apparatus', 'Level', 'Skill', 'Result']];
       for (const r of d.reports) for (const x of r.results) skills.push([r.first_name + ' ' + r.last_name, r.apparatus, x.level, x.name, ({ pass: 'Did it', partial: 'Partly', fail: 'Failed' })[x.result]]);
       try {
-        const sheet = await writeSpreadsheet(env, { sheetId: event.sheet_id, title: `MFU evaluation · ${event.title} · ${event.event_date}`, tabs: [{ name: 'Summary', rows: summary }, { name: 'Skills', rows: skills }] });
+        const sheet = await writeSpreadsheet(env, { sheetId: event.sheet_id, title: `MFU evaluation · ${event.title} · ${event.event_date}`, tabs: [{ name: 'Summary', rows: summary }, { name: 'Evaluators', rows: evaluators }, { name: 'Skills', rows: skills }] });
         // Every active coach (and ADMIN_EMAIL, if set) can open the sheet; the Google account that saves it already owns it. Only people not shared with yet are added, and a new sheet starts fresh.
         const already = new Set(sheet.id === event.sheet_id ? parseList(event.sheet_shared) : []);
         const people = [...new Set([...(env.ADMIN_EMAIL ? [adminEmail(env)] : []), ...(await all(env, "SELECT email FROM coaches WHERE COALESCE(active,1)=1 AND email IS NOT NULL AND TRIM(email)<>''")).map(c => cleanEmail(c.email))].filter(isEmail))];
@@ -549,7 +567,7 @@ export async function handleFeatures(path, method, request, env, url, actor) {
     const [batches, students, evals, ann, meetings] = await env.DB.batch([
       env.DB.prepare("SELECT b.id,b.name,b.days,b.start_time,b.end_time,b.center_id,(SELECT COUNT(*) FROM batch_students x WHERE x.batch_id=b.id) AS students,(SELECT MAX(attendance_date) FROM student_attendance a WHERE a.batch_id=b.id) AS last_taken,(SELECT COUNT(*) FROM student_attendance a WHERE a.batch_id=b.id AND a.attendance_date=?) AS today_marked FROM batch_coaches bc JOIN batches b ON b.id=bc.batch_id WHERE bc.coach_id=? AND COALESCE(b.active,1)=1 ORDER BY b.name").bind(now, actor.id),
       env.DB.prepare("SELECT DISTINCT s.id,s.first_name,s.last_name,s.center_id,s.pole_level,s.rope_level,s.yoga_level,(SELECT ROUND(100.0*SUM(a.status IN ('present','late'))/COUNT(*)) FROM student_attendance a WHERE a.student_id=s.id AND a.attendance_date>=date('now','-30 days')) AS att_rate FROM batch_coaches bc JOIN batch_students bs ON bs.batch_id=bc.batch_id JOIN students s ON s.id=bs.student_id WHERE bc.coach_id=? AND COALESCE(s.active,1)=1 ORDER BY s.first_name,s.last_name").bind(actor.id),
-      env.DB.prepare("SELECT e.id,e.title,e.event_date,COUNT(ep.student_id) AS students FROM eval_participants ep JOIN events e ON e.id=ep.event_id WHERE ep.coach_id=? AND e.event_date>=date('now','-1 day') GROUP BY e.id ORDER BY e.event_date").bind(actor.id),
+      env.DB.prepare("SELECT e.id,e.title,e.event_date,COUNT(ep.student_id) AS students FROM eval_participants ep JOIN events e ON e.id=ep.event_id WHERE (ep.coach_id=?1 OR ep.coach2_id=?1 OR EXISTS(SELECT 1 FROM eval_evaluators v WHERE v.event_id=ep.event_id AND v.student_id=ep.student_id AND (v.coach_id=?1 OR v.coach2_id=?1))) AND e.event_date>=date('now','-1 day') GROUP BY e.id ORDER BY e.event_date").bind(actor.id),
       env.DB.prepare("SELECT id,title,body,created_at,created_by,pinned FROM announcements WHERE audience IN ('all','coaches') ORDER BY pinned DESC,created_at DESC LIMIT 10"),
       env.DB.prepare("SELECT id,title,meeting_date,start_time,meet_url,attendees FROM meetings WHERE meeting_date>=? ORDER BY meeting_date,start_time LIMIT 50").bind(now)
     ]);
