@@ -69,6 +69,10 @@ export async function writeSpreadsheet(env, { sheetId, title, tabs }) {
   let sheet;
   if (sheetId) {
     try {
+      // Add any tab the sheet doesn't have yet (e.g. a new "Evaluators" tab), so the same sheet and link keep working.
+      const have = new Set(((await call(env, `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.title`)).sheets || []).map(x => x.properties.title));
+      const missing = tabs.filter(t => !have.has(t.name));
+      if (missing.length) await call(env, `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, { method: 'POST', body: JSON.stringify({ requests: missing.map(t => ({ addSheet: { properties: { title: t.name, gridProperties: { frozenRowCount: 1 } } } })) }) });
       await call(env, `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values:batchClear`, { method: 'POST', body: JSON.stringify({ ranges: tabs.map(t => `'${t.name}'`) }) });
       sheet = { id: sheetId, url: `https://docs.google.com/spreadsheets/d/${sheetId}/edit` };
     } catch (e) { if (/Google needs permission/.test(e.message)) throw e; sheet = await create(); }

@@ -34,6 +34,10 @@
 :root[data-theme="dark"] .eval-row.is-partial{background:#172d47}
 .eval-row.is-partial .eval-btn.partial{background:var(--blue);color:#fff;border-color:var(--blue)}
 .ev-filters input,.ev-filters select{max-width:220px}
+.ev-bulk select{max-width:200px}
+.ev-pairs tr.ev-first td{border-top:2px solid var(--line)}
+.ev-pairs tr.ev-skip td:not([rowspan]){opacity:.55}
+.ev-pairs select{min-width:150px}
 .ev-nav{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}.ev-nav b{font:800 17px Manrope,sans-serif}
 select.invalid,input.invalid{border-color:#b42318!important;box-shadow:0 0 0 3px rgba(180,35,24,.15)}
 .req{color:#b42318}

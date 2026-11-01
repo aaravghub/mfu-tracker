@@ -223,21 +223,41 @@
       V.innerHTML = `<div class="card"><h3>Who is being evaluated</h3><p class="muted">Tick the students to add. Saving only adds the kids you ticked and removes the ones you unticked, so people adding kids on other laptops at the same time won't overwrite each other.</p><div id="evpick"></div><div class="modal-actions"><button class="btn" id="evnext">Next: assign evaluators ↓</button></div></div><div class="card section-gap" id="evassign"></div>`;
       const startIds = new Set(d.participants.map(p => p.student_id));
       const picker = await studentPicker($('#evpick'), [...startIds], { filters: true });
-      const cur = new Map(d.participants.map(p => [p.student_id, { c1: p.coach_id || '', c2: p.coach2_id || '' }]));
+      // Each student: a primary and a second evaluator for pole, rope and yoga (or "not evaluated" on that apparatus).
+      const blank = () => ({ c1: isCoach() ? state.me.coach_id : '', c2: '', skip: false });
+      const cur = new Map(d.participants.map(p => [p.student_id, Object.fromEntries(APPS.map(a => { const e = p.evaluators?.[a] || {}; return [a, { c1: e.coach_id || '', c2: e.coach2_id || '', skip: !!e.skip }]; }))]));
+      const read = () => $$('[data-evc]').forEach(el => { const v = cur.get(el.dataset.evc), slot = v[el.dataset.app]; if (el.dataset.slot === 'skip') slot.skip = el.checked; else slot[el.dataset.slot] = el.value; });
       const drawAssign = () => {
-        $$('[data-evc]').forEach(s => { const v = cur.get(s.dataset.evc) || {}; v[s.dataset.slot] = s.value; cur.set(s.dataset.evc, v); });
+        if ($('#evassign').innerHTML) read();
         const ids = picker.ids();
-        $('#evassign').innerHTML = `<h3>Evaluators</h3><p class="muted">Every student needs an evaluator. A second evaluator is optional.</p>${ids.length ? `<div class="toolbar"><select id="evbulk" style="max-width:220px">${coachOpts('')}</select><button class="btn secondary small" id="evbulkgo">Set evaluator for everyone</button><select id="evbulk2" style="max-width:220px">${coachOpts('').replace('Not assigned', 'No second evaluator')}</select><button class="btn secondary small" id="evbulkgo2">Set second evaluator for everyone</button></div><div class="table-wrap"><table><thead><tr><th>Student</th><th>Evaluator</th><th>Second evaluator</th></tr></thead><tbody>${ids.map(id => { const s = picker.students.find(x => x.id === id), v = cur.get(id) || {}; return `<tr><td><b>${esc(nameOf(s))}</b><br><small class="muted">Pole L${s.pole_level} · Rope L${s.rope_level} · Yoga L${s.yoga_level}</small></td><td><select data-evc="${esc(id)}" data-slot="c1">${coachOpts(v.c1 || (isCoach() ? state.me.coach_id : ''))}</select></td><td><select data-evc="${esc(id)}" data-slot="c2">${coachOpts(v.c2 || '').replace('Not assigned', 'None')}</select></td></tr>`; }).join('')}</tbody></table></div>` : '<p class="muted">No students picked yet.</p>'}<p class="error" id="everr"></p><div class="modal-actions"><button class="btn" id="evsavep">Save students & evaluators</button></div>`;
-        $('#evbulkgo') && ($('#evbulkgo').onclick = () => $$('[data-slot="c1"]').forEach(s => s.value = $('#evbulk').value));
-        $('#evbulkgo2') && ($('#evbulkgo2').onclick = () => $$('[data-slot="c2"]').forEach(s => s.value = $('#evbulk2').value));
+        ids.forEach(id => { if (!cur.has(id)) cur.set(id, Object.fromEntries(APPS.map(a => [a, blank()]))); });
+        $('#evassign').innerHTML = `<h3>Evaluators</h3><p class="muted">Every student needs a <b>primary</b> and a <b>second</b> evaluator for <b>pole, rope and yoga</b>. Tick “Not evaluated” for an apparatus they aren't doing.</p>${ids.length ? `<div class="toolbar ev-bulk"><select id="evbapp"><option value="">All three</option>${APPS.map(a => `<option value="${a}">${cap(a)}</option>`).join('')}</select><select id="evbulk">${coachOpts('').replace('Not assigned', 'Primary…')}</select><select id="evbulk2">${coachOpts('').replace('Not assigned', 'Second…')}</select><button class="btn secondary small" id="evbulkgo">Set for everyone</button></div>
+          <div class="table-wrap"><table class="ev-pairs"><thead><tr><th>Student</th><th>Apparatus</th><th>Primary evaluator</th><th>Second evaluator</th><th>Not evaluated</th></tr></thead><tbody>${ids.map(id => { const s = picker.students.find(x => x.id === id), v = cur.get(id);
+            return APPS.map((a, i) => `<tr class="${i === 0 ? 'ev-first' : ''} ${v[a].skip ? 'ev-skip' : ''}">${i === 0 ? `<td rowspan="3"><b>${esc(nameOf(s))}</b><br><small class="muted">Pole L${s.pole_level} · Rope L${s.rope_level} · Yoga L${s.yoga_level}</small></td>` : ''}<td><span class="chip">${cap(a)}</span></td><td><select data-evc="${esc(id)}" data-app="${a}" data-slot="c1" ${v[a].skip ? 'disabled' : ''}>${coachOpts(v[a].c1)}</select></td><td><select data-evc="${esc(id)}" data-app="${a}" data-slot="c2" ${v[a].skip ? 'disabled' : ''}>${coachOpts(v[a].c2)}</select></td><td><label class="check"><input type="checkbox" data-evc="${esc(id)}" data-app="${a}" data-slot="skip" ${v[a].skip ? 'checked' : ''}> Skip</label></td></tr>`).join(''); }).join('')}</tbody></table></div>` : '<p class="muted">No students picked yet.</p>'}<p class="error" id="everr"></p><div class="modal-actions"><button class="btn" id="evsavep">Save students & evaluators</button></div>`;
+        $$('[data-slot="skip"]').forEach(cb => cb.onchange = () => { read(); drawAssign(); });
+        $('#evbulkgo') && ($('#evbulkgo').onclick = () => {
+          read(); const app = $('#evbapp').value, c1 = $('#evbulk').value, c2 = $('#evbulk2').value;
+          if (!c1 && !c2) return toast('Pick a primary or second evaluator to set');
+          picker.ids().forEach(id => (app ? [app] : APPS).forEach(a => { const v = cur.get(id)[a]; if (v.skip) return; if (c1) v.c1 = c1; if (c2) v.c2 = c2; }));
+          drawAssign();
+        });
         $('#evsavep').onclick = async () => {
-          const ids = picker.ids(), sel = (id, slot) => $(`[data-evc="${CSS.escape(id)}"][data-slot="${slot}"]`);
-          const missing = ids.filter(id => !sel(id, 'c1')?.value);
-          $$('[data-slot="c1"]').forEach(s => s.classList.toggle('invalid', !s.value));
-          if (missing.length) { $('#everr').textContent = `Choose an evaluator for ${missing.length === 1 ? nameOf(picker.students.find(x => x.id === missing[0])) : missing.length + ' students'} before saving.`; sel(missing[0], 'c1')?.focus(); return; }
+          read();
+          const ids = picker.ids(), problems = [];
+          $$('.ev-pairs select').forEach(s => s.classList.remove('invalid'));
+          for (const id of ids) for (const a of APPS) {
+            const v = cur.get(id)[a]; if (v.skip) continue;
+            const bad = !v.c1 || !v.c2 || v.c1 === v.c2;
+            if (bad) { problems.push([id, a, !v.c1 || !v.c2 ? 'missing' : 'same']); ['c1', 'c2'].forEach(k => { if (!v[k] || v.c1 === v.c2) $(`[data-evc="${CSS.escape(id)}"][data-app="${a}"][data-slot="${k}"]`)?.classList.add('invalid'); }); }
+          }
+          if (problems.length) {
+            const [id, a, why] = problems[0], who = nameOf(picker.students.find(x => x.id === id));
+            $('#everr').textContent = why === 'same' ? `${who}'s ${a} primary and second evaluator must be different coaches.` : `${who} needs a primary and a second evaluator for ${a}${problems.length > 1 ? ` (and ${problems.length - 1} more to fill in)` : ''}. Tick “Skip” if they aren't doing ${a}.`;
+            $(`[data-evc="${CSS.escape(id)}"][data-app="${a}"]`)?.focus(); return;
+          }
           $('#everr').textContent = '';
           try {
-            const participants = ids.map(id => ({ student_id: id, coach_id: sel(id, 'c1').value, coach2_id: sel(id, 'c2').value || null }));
+            const participants = ids.map(id => ({ student_id: id, evaluators: Object.fromEntries(APPS.map(a => { const v = cur.get(id)[a]; return [a, { coach_id: v.c1 || null, coach2_id: v.c2 || null, skip: v.skip }]; })) }));
             const remove = [...startIds].filter(id => !ids.includes(id));
             const r = await api('evaluations/' + state.evalId + '/participants', { method: 'POST', body: JSON.stringify({ participants, remove }) });
             toast(`Saved ${r.added} student${r.added === 1 ? '' : 's'}${r.removed ? ' · removed ' + r.removed : ''}`); show('evaluations');
@@ -249,7 +269,7 @@
     }
 
     if (tab === 'attendance') {
-      V.innerHTML = d.participants.length ? `<div class="card"><h3>Evaluation attendance</h3><div class="toolbar"><input type="search" id="eaq" placeholder="Search students…"><span class="muted" id="eacount">${d.participants.length} students</span></div><div class="table-wrap"><table><thead><tr><th>Student</th><th>Evaluator</th><th>Status</th></tr></thead><tbody>${d.participants.map(p => `<tr data-n="${esc((p.first_name + ' ' + p.last_name).toLowerCase())}"><td><b>${esc(p.first_name + ' ' + p.last_name)}</b></td><td>${esc([p.coach_name, p.coach2_name].filter(Boolean).join(' + ') || '—')}</td><td>${statusSelect(`data-es="${esc(p.student_id)}"`, p.status)}</td></tr>`).join('')}</tbody></table></div><div class="modal-actions"><button class="btn secondary" id="eall">All present</button><button class="btn" id="esave">Save attendance</button></div></div>` : `<div class="card">${empty('📝', 'Nobody added yet', 'Add students on the “Students & evaluators” tab first.')}</div>`;
+      V.innerHTML = d.participants.length ? `<div class="card"><h3>Evaluation attendance</h3><div class="toolbar"><input type="search" id="eaq" placeholder="Search students…"><span class="muted" id="eacount">${d.participants.length} students</span></div><div class="table-wrap"><table><thead><tr><th>Student</th><th>Evaluator</th><th>Status</th></tr></thead><tbody>${d.participants.map(p => `<tr data-n="${esc((p.first_name + ' ' + p.last_name).toLowerCase())}"><td><b>${esc(p.first_name + ' ' + p.last_name)}</b></td><td><small>${APPS.map(a => { const e = p.evaluators?.[a] || {}; return `<b>${cap(a)}:</b> ${e.skip ? 'not evaluated' : esc([e.coach_name, e.coach2_name].filter(Boolean).join(' + ') || '—')}`; }).join('<br>')}</small></td><td>${statusSelect(`data-es="${esc(p.student_id)}"`, p.status)}</td></tr>`).join('')}</tbody></table></div><div class="modal-actions"><button class="btn secondary" id="eall">All present</button><button class="btn" id="esave">Save attendance</button></div></div>` : `<div class="card">${empty('📝', 'Nobody added yet', 'Add students on the “Students & evaluators” tab first.')}</div>`;
       $('#eaq') && ($('#eaq').oninput = e => { const q = e.target.value.toLowerCase(); let n = 0; $$('#evview tr[data-n]').forEach(tr => { const on = tr.dataset.n.includes(q); tr.style.display = on ? '' : 'none'; n += on; }); $('#eacount').textContent = n + ' of ' + d.participants.length + ' students'; });
       $('#eall') && ($('#eall').onclick = () => $$('#evview tr[data-n]').forEach(tr => { if (tr.style.display !== 'none') tr.querySelector('[data-es]').value = 'present'; }));
       $('#esave') && ($('#esave').onclick = async () => { try { await api('evaluations/' + state.evalId + '/attendance', { method: 'POST', body: JSON.stringify({ records: $$('[data-es]').map(s => ({ student_id: s.dataset.es, status: s.value })) }) }); toast('Attendance saved'); } catch (e) { toast(e.message); } });
@@ -257,11 +277,11 @@
 
     if (tab === 'evaluate') {
       const [students, centers] = await Promise.all([api('students'), api('centers')]);
-      const everyone = d.participants.length ? d.participants.map(p => ({ ...students.find(s => s.id === p.student_id), coach_id: p.coach_id, coach2_id: p.coach2_id })).filter(s => s.id) : students.filter(s => s.active !== 0);
+      const everyone = d.participants.length ? d.participants.map(p => ({ ...students.find(s => s.id === p.student_id), coach_id: p.coach_id, coach2_id: p.coach2_id, evaluators: p.evaluators })).filter(s => s.id) : students.filter(s => s.active !== 0);
       const S = state.evalForm ||= { email: true };
       S.app ||= 'pole';
       // Filters: name search, center, and the level they are at now on the chosen apparatus.
-      const pool = everyone.filter(s => (!S.q || nameOf(s).toLowerCase().includes(S.q.toLowerCase())) && (!S.center || s.center_id === S.center) && (!S.lvl || levelOf(s, S.app) === Number(S.lvl)) && (!S.mine || s.coach_id === state.me?.coach_id || s.coach2_id === state.me?.coach_id));
+      const pool = everyone.filter(s => (!S.q || nameOf(s).toLowerCase().includes(S.q.toLowerCase())) && (!S.center || s.center_id === S.center) && (!S.lvl || levelOf(s, S.app) === Number(S.lvl)) && (!S.mine || s.coach_id === state.me?.coach_id || s.coach2_id === state.me?.coach_id || APPS.some(a => [s.evaluators?.[a]?.coach_id, s.evaluators?.[a]?.coach2_id].includes(state.me?.coach_id))));
       const filters = `<div class="toolbar ev-filters"><input id="evq" type="search" placeholder="Search students…" value="${esc(S.q || '')}"><select id="evcen"><option value="">All centers</option>${centers.map(c => `<option value="${esc(c.id)}" ${S.center === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select><select id="evlf"><option value="">Any ${S.app} level</option>${[1, 2, 3, 4, 5].map(n => `<option value="${n}" ${Number(S.lvl) === n ? 'selected' : ''}>Now at ${cap(S.app)} Level ${n}</option>`).join('')}</select>${isCoach() ? `<label class="check"><input type="checkbox" id="evmine" ${S.mine ? 'checked' : ''}> Only mine</label>` : ''}<span class="muted">${pool.length} of ${everyone.length} students</span></div>`;
       if (!pool.some(s => s.id === S.student)) S.student = (isCoach() && pool.find(s => s.coach_id === state.me.coach_id) || pool[0])?.id;
       const stu = pool.find(s => s.id === S.student);
@@ -282,8 +302,8 @@
       V.innerHTML = filters + `<div class="card" id="evcard"><div class="ev-nav"><button class="btn secondary small" id="evprev" ${pool.length < 2 ? 'disabled' : ''}>← Previous student</button><b>${esc(nameOf(stu))}</b><span class="muted">${idx + 1} of ${pool.length}</span></div>
         <div class="form-grid"><label>Student<select id="evstu">${pool.map(s => { const done = d.reports.filter(r => r.student_id === s.id).length; return `<option value="${esc(s.id)}" ${s.id === stu.id ? 'selected' : ''}>${esc(nameOf(s))}${done ? ' ✓' : ''}</option>`; }).join('')}</select></label>
         <label>Apparatus<select id="evapp">${APPS.map(a => `<option value="${a}" ${a === S.app ? 'selected' : ''}>${cap(a)} (now Level ${levelOf(stu, a)})</option>`).join('')}</select></label>
-        <label><span>Evaluator <span class="req">*</span></span><select id="evcoach" required>${coachOpts(existing?.coach_id || stu.coach_id || (isCoach() ? state.me.coach_id : ''))}</select></label>
-        <label>Second evaluator<select id="evcoach2">${coachOpts(existing?.coach2_id || stu.coach2_id || '').replace('Not assigned', 'None')}</select></label>
+        <label><span>Primary evaluator (${cap(S.app)}) <span class="req">*</span></span><select id="evcoach" required>${coachOpts(existing?.coach_id || stu.evaluators?.[S.app]?.coach_id || (isCoach() ? state.me.coach_id : ''))}</select></label>
+        <label><span>Second evaluator (${cap(S.app)}) <span class="req">*</span></span><select id="evcoach2" required>${coachOpts(existing?.coach2_id || stu.evaluators?.[S.app]?.coach2_id || '')}</select></label>
         <label>Level they're going for<select id="evlvl">${[1, 2, 3, 4, 5].map(n => `<option value="${n}" ${n === Number(S.level) ? 'selected' : ''}>Level ${n}</option>`).join('')}</select></label></div>
         <p class="muted section-gap-sm">${esc(nameOf(stu))} is Level ${from} on ${S.app}${existing ? ' when this evaluation started' : ''}. Results are drafts until the evaluation is finalized.${existing?.updated_at ? ` <b>Last saved ${esc(fmtStamp(existing.updated_at))} ${esc(new Date(existing.updated_at.replace(' ', 'T') + 'Z').toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))}${existing.updated_by ? ' by ' + esc(existing.updated_by) : ''}</b> — saving again replaces it, and the newest save is what counts.` : ''} Tap ✓ if they did the skill, ◐ if they partly did it, or ✗ if they didn't.</p>
         <div class="toolbar"><button class="btn secondary small" id="allpass">Mark all ✓</button><button class="btn secondary small" id="allclear">Clear</button><span class="muted" id="evcount"></span></div>
@@ -310,7 +330,10 @@
       $('#evlvl').onchange = e => { S.level = Number(e.target.value); show('evaluations'); };
       paint();
       const save = async next => {
-        if (!$('#evcoach').value) { $('#everr2').textContent = 'Choose an evaluator for ' + nameOf(stu) + ' before saving.'; $('#evcoach').classList.add('invalid'); $('#evcoach').focus(); return; }
+        const c1 = $('#evcoach').value, c2 = $('#evcoach2').value;
+        $('#evcoach').classList.toggle('invalid', !c1 || c1 === c2); $('#evcoach2').classList.toggle('invalid', !c2 || c1 === c2);
+        if (!c1 || !c2) { $('#everr2').textContent = `Choose a primary and a second evaluator for ${nameOf(stu)}'s ${S.app} before saving.`; (c1 ? $('#evcoach2') : $('#evcoach')).focus(); return; }
+        if (c1 === c2) { $('#everr2').textContent = 'The primary and second evaluator must be different coaches.'; $('#evcoach2').focus(); return; }
         try {
           const r = await api('evaluations/' + state.evalId + '/report', { method: 'POST', body: JSON.stringify({ student_id: stu.id, apparatus: S.app, target_level: Number(S.level), coach_id: $('#evcoach').value, coach2_id: $('#evcoach2').value || null, outcome: $('#evout').value, notes: $('#evnotes').value, results: [...marks].map(([skill_id, result]) => ({ skill_id, result })) }) });
           toast(`Saved ${nameOf(stu)} · ${cap(S.app)} Level ${r.target_level}: ${r.outcome === 'passed' ? 'passed' : 'not passed yet'} — levels update when you finalize`);
@@ -339,7 +362,8 @@
         catch (e) { toast(e.message); b.disabled = false; b.textContent = '✓ Finalize & email parents'; }
       });
       $('#tosheet').onclick = async () => { const b = $('#tosheet'); b.disabled = true; b.textContent = 'Saving…'; try { const r = await api('evaluations/' + state.evalId + '/sheet', { method: 'POST', body: '{}' }); $('#sheetmsg').innerHTML = 'Saved to ' + link(r.url, 'this sheet ↗', '') + ` · coaches can open it (${r.shared_total} with access)` + (r.not_shared?.length ? ` · couldn't share with ${esc(r.not_shared.join(', '))}` : ''); toast('Saved to Google Sheets' + (r.shared ? ` · shared with ${r.shared} more` : '')); window.open(r.url, '_blank', 'noopener'); } catch (e) { toast(e.message); $('#sheetmsg').textContent = e.message; } b.disabled = false; b.textContent = 'Update Google Sheet'; };
-      $('#tocsv').onclick = () => csvDownload('evaluation-' + d.event.event_date + '.csv', [['Student', 'Apparatus', 'Evaluated by', 'Second evaluator', 'Level before', 'Level tried', 'Result', 'Change', 'Skills passed', 'Skills partly done', 'Skills failed', 'Notes'], ...d.reports.map(r => [r.first_name + ' ' + r.last_name, r.apparatus, r.coach_name || '', r.coach2_name || '', r.from_level ?? '', r.target_level, r.outcome === 'passed' ? 'Passed' : 'Not passed', r.outcome === 'passed' && r.target_level > (r.from_level ?? 0) ? 'Increased' : 'Stayed the same', r.results.filter(x => x.result === 'pass').map(x => x.name).join(', '), r.results.filter(x => x.result === 'partial').map(x => x.name).join(', '), r.results.filter(x => x.result === 'fail').map(x => x.name).join(', '), r.notes || ''])]);
+      const pairsOf = sid => { const p = d.participants.find(x => x.student_id === sid); return APPS.flatMap(a => { const e = p?.evaluators?.[a]; return !e ? ['', ''] : e.skip ? ['Not evaluated', 'Not evaluated'] : [e.coach_name || '', e.coach2_name || '']; }); };
+      $('#tocsv').onclick = () => csvDownload('evaluation-' + d.event.event_date + '.csv', [['Student', 'Apparatus', 'Evaluated by', 'Second evaluator', 'Level before', 'Level tried', 'Result', 'Change', 'Skills passed', 'Skills partly done', 'Skills failed', 'Notes', 'Pole primary', 'Pole second', 'Rope primary', 'Rope second', 'Yoga primary', 'Yoga second'], ...d.reports.map(r => [r.first_name + ' ' + r.last_name, r.apparatus, r.coach_name || '', r.coach2_name || '', r.from_level ?? '', r.target_level, r.outcome === 'passed' ? 'Passed' : 'Not passed', r.outcome === 'passed' && r.target_level > (r.from_level ?? 0) ? 'Increased' : 'Stayed the same', r.results.filter(x => x.result === 'pass').map(x => x.name).join(', '), r.results.filter(x => x.result === 'partial').map(x => x.name).join(', '), r.results.filter(x => x.result === 'fail').map(x => x.name).join(', '), r.notes || '', ...pairsOf(r.student_id)])]);
     }
   };
 
