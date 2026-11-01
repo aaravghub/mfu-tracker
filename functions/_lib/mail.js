@@ -43,8 +43,13 @@ const base64 = s => {
 const enc = s => base64url(new TextEncoder().encode(s));
 const headerSafe = s => String(s || '').replace(/[\r\n]/g, ' ').replace(/[^\x20-\x7E]/g, '?');
 
-export async function sendMessages(env, messages) {
+// Every email except account emails (sign-ups, invites, password links) is copied to MAIL_CC (default info@msquarefit.com).
+// One email gets a normal Cc. A send to many parents copies the address once, with the list of who got it, instead of hundreds of copies.
+const ccAddress = env => (env.MAIL_CC === undefined ? 'info@msquarefit.com' : String(env.MAIL_CC)).trim().toLowerCase();
+
+export async function sendMessages(env, messages, { cc = true } = {}) {
   let sent = 0, failed = 0, error = '';
+  const ccTo = cc && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ccAddress(env)) ? ccAddress(env) : '', single = messages.length === 1;
   if (!mailConfigured(env)) return { sent: 0, failed: messages.length, error: 'Gmail is not configured. Add the Google OAuth secrets in Cloudflare Pages.' };
   let token;
   try { token = await googleAccessToken(env); }
@@ -55,6 +60,7 @@ export async function sendMessages(env, messages) {
       const mime = [
         'From: MFU <automallakhamb@gmail.com>',
         'To: ' + m.to,
+        ...(single && ccTo && ccTo !== String(m.to).toLowerCase() ? ['Cc: ' + ccTo] : []),
         'Subject: ' + headerSafe(m.subject),
         'MIME-Version: 1.0',
         'Content-Type: multipart/alternative; boundary="' + boundary + '"',
@@ -84,6 +90,13 @@ export async function sendMessages(env, messages) {
         if (!error) error = data.error?.message || 'Gmail API returned HTTP ' + res.status;
       }
     } catch (e) { failed++; if (!error) error = String(e.message || 'Could not send through Gmail.'); }
+  }
+  // Bulk send: one copy for the CC address, listing everyone it went to.
+  if (!single && ccTo && sent) {
+    const first = messages[0], list = messages.map(m => m.to).join(', ');
+    await sendMessages(env, [{ to: ccTo, subject: '[Copy] ' + first.subject + ` (sent to ${messages.length})`,
+      html: `<div style="font:13px system-ui;background:#fff8e1;border:1px solid #f1d58a;border-radius:8px;padding:10px 12px;margin:0 0 12px">Copy of an email MFU Tracker sent to ${messages.length} people (${sent} delivered${failed ? ', ' + failed + ' failed' : ''}): ${esc(list)}</div>` + (first.html || ''),
+      text: `Copy of an email sent to ${messages.length} people: ${list}\n\n` + (first.text || '') }], { cc: false });
   }
   return { sent, failed, error };
 }

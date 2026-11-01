@@ -263,7 +263,7 @@ export async function handleFeatures(path, method, request, env, url, actor) {
 
   // ---- one student's full profile (same view parents get) ----
   if (root === 'student-summary' && method === 'GET') {
-    const s = await one(env, 'SELECT id,first_name,last_name,center_id,photo_url,pole_level,rope_level,yoga_level,parent_name,parent_email,parent_phone,notes,active FROM students WHERE id=?', q('student_id') || '');
+    const s = await one(env, 'SELECT id,first_name,last_name,center_id,photo_url,pole_level,rope_level,yoga_level,parent_name,parent_email,parent_phone,notes,active,dob,gender,age FROM students WHERE id=?', q('student_id') || '');
     if (!s) return json({ error: 'Student not found.' }, 404);
     const child = await studentDetail(env, s);
     await parentExtras(env, { id: '', email: '' }, [child]);
@@ -369,9 +369,9 @@ export async function handleFeatures(path, method, request, env, url, actor) {
     if (method === 'POST' && action === 'sheet') {
       const d = await evalData(env, id);
       const att = new Map(d.participants.map(p => [p.student_id, p]));
-      const summary = [['Student', 'Apparatus', 'Evaluated by', 'Second evaluator', 'Level before', 'Level tried', 'Result', 'Level now', 'Change', 'Skills passed', 'Skills partly done', 'Skills failed', 'Attendance', 'Notes']];
-      for (const r of d.reports) summary.push([r.first_name + ' ' + r.last_name, r.apparatus, r.coach_name || '', r.coach2_name || '', r.from_level ?? '', r.target_level, r.outcome === 'passed' ? 'Passed' : 'Not passed', r.current_level, changeLabel(r), r.results.filter(x => x.result === 'pass').length, r.results.filter(x => x.result === 'partial').length, r.results.filter(x => x.result === 'fail').length, att.get(r.student_id)?.status || '', r.notes || '']);
-      for (const p of d.participants) if (!d.reports.some(r => r.student_id === p.student_id)) summary.push([p.first_name + ' ' + p.last_name, '', p.coach_name || '', p.coach2_name || '', '', '', 'No report yet', '', '', '', '', '', p.status || '', '']);
+      const summary = [['Student', 'Apparatus', 'Evaluated by', 'Second evaluator', 'Level before', 'Level tried', 'Result', 'Level now', 'Change', 'Skills passed', 'Skills partly done', 'Skills failed', '# passed', '# partly', '# failed', 'Attendance', 'Notes']];
+      for (const r of d.reports) summary.push([r.first_name + ' ' + r.last_name, r.apparatus, r.coach_name || '', r.coach2_name || '', r.from_level ?? '', r.target_level, r.outcome === 'passed' ? 'Passed' : 'Not passed', r.current_level, changeLabel(r), r.results.filter(x => x.result === 'pass').map(x => x.name).join(', '), r.results.filter(x => x.result === 'partial').map(x => x.name).join(', '), r.results.filter(x => x.result === 'fail').map(x => x.name).join(', '), r.results.filter(x => x.result === 'pass').length, r.results.filter(x => x.result === 'partial').length, r.results.filter(x => x.result === 'fail').length, att.get(r.student_id)?.status || '', r.notes || '']);
+      for (const p of d.participants) if (!d.reports.some(r => r.student_id === p.student_id)) summary.push([p.first_name + ' ' + p.last_name, '', p.coach_name || '', p.coach2_name || '', '', '', 'No report yet', '', '', '', '', '', '', '', '', p.status || '', '']);
       const skills = [['Student', 'Apparatus', 'Level', 'Skill', 'Result']];
       for (const r of d.reports) for (const x of r.results) skills.push([r.first_name + ' ' + r.last_name, r.apparatus, x.level, x.name, ({ pass: 'Did it', partial: 'Partly', fail: 'Failed' })[x.result]]);
       try {

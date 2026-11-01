@@ -29,7 +29,7 @@ export async function emailSetupLinks(env, request, items) {
       text: `${hi}\n\n${lead}\n\nSet your password: ${link}\n\nThis link works for 7 days.`
     };
   });
-  return sendMessages(env, msgs);
+  return sendMessages(env, msgs, { cc: false });
 }
 
 async function childrenFor(env, parentId) {

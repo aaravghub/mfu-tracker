@@ -174,7 +174,7 @@ export async function handleAdminExtra(path, method, request, env, url) {
       if (recips.length > 1000) return json({ error: 'Too many recipients for one send. Narrow the audience by center.' }, 400);
 
       const msgs = recips.map(r => { const e = build(r.name ? r.name.split(/\s+/)[0] : ''); return { to: r.email, subject: (isTest ? '[TEST] ' : '') + subject, html: e.html, text: e.text }; });
-      const r = await sendMessages(env, msgs);
+      const r = await sendMessages(env, msgs, { cc: !isTest });
       const aud = isTest ? 'test' : body.audience?.type === 'center' ? 'center:' + body.audience.center_id : body.audience?.type === 'students' ? 'selected students' : 'all parents';
       await env.DB.prepare('INSERT INTO email_log(id,subject,audience,total,sent,failed,is_test) VALUES(?,?,?,?,?,?,?)').bind(crypto.randomUUID(), subject, aud, recips.length, r.sent, r.failed, isTest ? 1 : 0).run();
       if (!r.sent) return json({ error: r.error || 'The email provider rejected the message.', sent: 0, failed: r.failed }, 502);
