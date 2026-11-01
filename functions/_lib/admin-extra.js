@@ -51,6 +51,34 @@ export async function handleAdminExtra(path, method, request, env, url) {
   if (root === 'parents') {
     if (method === 'GET' && !id) return json(await listParents(env));
 
+    // Bulk add parent emails: each row is a student and an email. A student with no parent email gets it as their
+    // parent email; a student who already has a different one gets it as another parent (a linked parent account).
+    if (method === 'POST' && id === 'bulk-emails') {
+      const rows = (body?.rows || []).filter(r => r && typeof r.student_id === 'string').slice(0, 500);
+      if (!rows.length) return json({ error: 'Nothing to add.' }, 400);
+      const results = [];
+      for (const r of rows) {
+        const email = cleanEmail(r.email);
+        if (!isEmail(email)) { results.push({ student_id: r.student_id, email, result: 'invalid' }); continue; }
+        const st = await env.DB.prepare('SELECT id,parent_email,parent_name FROM students WHERE id=?').bind(r.student_id).first();
+        if (!st) { results.push({ student_id: r.student_id, email, result: 'no_student' }); continue; }
+        const current = cleanEmail(st.parent_email);
+        const linked = await env.DB.prepare('SELECT 1 x FROM parent_students ps JOIN parents p ON p.id=ps.parent_id WHERE ps.student_id=? AND p.email=?').bind(st.id, email).first();
+        if (current === email || linked) { results.push({ student_id: st.id, email, result: 'already' }); continue; }
+        if (!current) {
+          await env.DB.prepare('UPDATE students SET parent_email=? WHERE id=?').bind(email, st.id).run();
+          results.push({ student_id: st.id, email, result: 'set' });
+        } else {
+          let p = await env.DB.prepare('SELECT id FROM parents WHERE email=?').bind(email).first();
+          if (!p) { p = { id: crypto.randomUUID() }; await env.DB.prepare('INSERT INTO parents(id,email,name) VALUES(?,?,?)').bind(p.id, email, String(r.name || '').slice(0, 120)).run(); }
+          await env.DB.prepare('INSERT OR IGNORE INTO parent_students(parent_id,student_id) VALUES(?,?)').bind(p.id, st.id).run();
+          results.push({ student_id: st.id, email, result: 'added' });
+        }
+      }
+      const count = k => results.filter(x => x.result === k).length;
+      return json({ ok: true, results, set: count('set'), added: count('added'), already: count('already'), invalid: count('invalid') });
+    }
+
     if (method === 'POST' && id === 'sync') {
       // Create one account per distinct parent_email on student records, linked to all matching students.
       const rows = (await env.DB.prepare("SELECT id,parent_name,parent_email FROM students WHERE COALESCE(active,1)=1 AND parent_email IS NOT NULL AND TRIM(parent_email)<>''").all()).results;
