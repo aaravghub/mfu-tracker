@@ -46,6 +46,7 @@ const COLUMNS = [
   ['events', 'location', 'TEXT'],
   ['events', 'sheet_id', 'TEXT'],
   ['events', 'sheet_url', 'TEXT'],
+  ['events', 'sheet_shared', 'TEXT'],
   ['sessions', 'parent_id', 'TEXT'],
   ['sessions', 'last_seen', 'INTEGER'],
   ['student_attendance', 'drop_in', 'INTEGER DEFAULT 0'],
