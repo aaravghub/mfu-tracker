@@ -32,8 +32,10 @@ function openModal(title, body, { wide = false } = {}) {
   root.querySelector('input,select,textarea')?.focus();
   return { root, close, $: s => root.querySelector(s), $$: s => [...root.querySelectorAll(s)] };
 }
+// A KPI with a three-bar meter, as in "85% 280/329". Green from 80%, orange from 50%, red below.
+const meter = (part, whole) => { if (!whole) return '<strong>—</strong>'; const p = part / whole, lvl = p >= .8 ? 'ok' : p >= .5 ? 'mid' : 'low'; return `<div class="meter-kpi"><span class="meter ${lvl}" aria-hidden="true">${[1, 2, 3].map(i => `<i class="${p >= i / 3 - .17 ? 'on' : ''}"></i>`).join('')}</span><strong>${Math.round(p * 100)}%</strong><small>${part}/${whole}</small></div>`; };
 const hero = (title, sub, actions = '') => `<div class="welcome"><div><h2>${title}</h2><p>${sub}</p></div><div class="welcome-actions">${actions}</div></div>`;
-const empty = (icon, title, sub) => `<div class="empty-state"><div class="empty-icon">${icon}</div><b>${esc(title)}</b><p>${esc(sub)}</p></div>`;
+const empty = (icon, title, sub) => `<div class="empty-state"><b>${esc(title)}</b><p>${esc(sub)}</p></div>`; // icon argument kept so callers need no change
 
 /* ---------- navigation & roles ---------- */
 const NAV = {
@@ -50,13 +52,13 @@ function setRole(role, me = {}) {
   state.role = role;
   $('#nav').innerHTML = NAV[role].map(([label, items]) => (label ? `<span class="nav-label">${label}</span>` : '') + items.map(([p, t]) => `<button data-page="${p}">${t}</button>`).join('')).join('');
   $('#logout').classList.remove('hidden');
-  $('#role-pill').textContent = role === 'admin' ? '● Admin' : role === 'coach' ? '● Coach · ' + (me.name || me.email || '') : '● ' + (me.name || me.email || 'Parent');
+  $('#role-pill').textContent = role === 'admin' ? 'Admin' : role === 'coach' ? 'Coach · ' + (me.name || me.email || '') : (me.name || me.email || 'Parent');
   state.me = me;
   document.body.dataset.role = role;
 }
 function clearRole() {
   state.role = null; delete document.body.dataset.role;
-  $('#nav').innerHTML = ''; $('#logout').classList.add('hidden'); $('#role-pill').textContent = '● Signed out';
+  $('#nav').innerHTML = ''; $('#logout').classList.add('hidden'); $('#role-pill').textContent = 'Signed out';
   document.body.classList.remove('nav-open');
 }
 $('#menu-toggle').onclick = () => { const o = document.body.classList.toggle('nav-open'); $('#menu-toggle').setAttribute('aria-expanded', String(o)); };
@@ -151,11 +153,11 @@ PAGES.overview = async () => {
   if (noEmail) todo.push([noEmail + ' student' + (noEmail > 1 ? 's' : '') + ' without a parent email', 'Add emails so parents can get updates.', 'students']);
   if (pending) todo.push([pending + ' parent' + (pending > 1 ? 's' : '') + ' haven\'t set a password', 'Send invites so they can sign in.', 'parents']);
   if (!upcoming.length) todo.push(['No upcoming events', 'Add the next evaluation or competition so parents can see it.', 'events']);
-  $('#content').innerHTML = hero('Welcome back', 'Everything across all MFU centers at a glance.',
+  $('#content').innerHTML = hero('All centers', 'Students, batches and what needs attention across every MFU center.',
     '<button class="btn" data-go="email">✉ Email parents</button><button class="btn secondary" data-go="events">+ Add event</button>') +
-    `<div class="stats">${[['Students', students.length], ['Parent accounts', parents.length], ['Batches', batches.length], ['Upcoming events', upcoming.length]].map(x => `<div class="stat"><span>${x[0]}</span><strong>${x[1]}</strong></div>`).join('')}</div>
+    `<div class="stats"><div class="stat"><span>Students</span><strong>${students.length}</strong></div><div class="stat" id="kpi-att"><span>Attendance, last 30 days</span><strong>—</strong></div><div class="stat"><span>Parents signed in</span>${meter(parents.length - pending, parents.length)}</div><div class="stat"><span>Upcoming events</span><strong>${upcoming.length}</strong></div></div>
     <div class="two-col"><div class="card"><h3>Next up</h3>${upcoming.length ? upcoming.slice(0, 4).map(e => `<div class="mini-event"><div class="date-chip"><b>${dateObj(e.event_date).getDate()}</b><span>${dateObj(e.event_date).toLocaleDateString('en-US', { month: 'short' })}</span></div><div><b>${esc(e.title)}</b><small>${typeLabel(e.event_type)} · ${esc(fmtTime(e.event_time) || fmtShort(e.event_date))}</small></div><span class="chip ${daysUntil(e.event_date) <= 7 ? 'warn' : ''}">${countdown(e.event_date)}</span></div>`).join('') : empty('📅', 'Nothing scheduled', 'Add an evaluation or competition.')}</div>
-    <div class="card"><h3>To do</h3>${todo.length ? todo.map(t => `<button class="todo" data-go="${t[2]}"><b>${esc(t[0])}</b><small>${esc(t[1])}</small><span>→</span></button>`).join('') : empty('✅', 'All caught up', 'Nothing needs your attention.')}</div></div>`;
+    <div class="card"><h3>To do</h3>${todo.length ? todo.map(t => `<button class="todo" data-go="${t[2]}"><b>${esc(t[0])}</b><small>${esc(t[1])}</small></button>`).join('') : empty('✅', 'All caught up', 'Nothing needs your attention.')}</div></div>`;
   $$('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go));
 };
 
@@ -188,7 +190,7 @@ const levelOfApp = (student, app) => Number(student[app + '_level']) || 1;
 const isImplied = (student, skill) => Number(skill.level) <= levelOfApp(student, skill.apparatus);
 
 async function progressModal(student, host) {
-  const [skills, prog] = await Promise.all([api('skills'), api('student-progress?student_id=' + encodeURIComponent(student.id))]);
+  const [skills, prog] = await Promise.all([api('skills?include=general'), api('student-progress?student_id=' + encodeURIComponent(student.id))]);
   const base = new Map(prog.map(p => [p.skill_id, { status: p.status, started_date: p.started_date || '', mastered_date: p.mastered_date || '' }])), changes = new Map();
   const today = (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
   let app = 'pole';
@@ -201,15 +203,17 @@ async function progressModal(student, host) {
   const datesHtml = (id, c) => `<span class="skill-dates" data-dates="${esc(id)}" ${c.status === 'not_started' ? 'hidden' : ''}><label>Started<input type="date" data-start="${esc(id)}" value="${esc(c.started_date)}" max="${today}"></label><label data-donewrap ${c.status === 'mastered' ? '' : 'hidden'}>Completed<input type="date" data-done="${esc(id)}" value="${esc(c.mastered_date)}" max="${today}"></label></span>`;
   const draw = () => {
     m.$('#ptabs').innerHTML = ['pole', 'rope', 'yoga'].map(a => `<button type="button" data-a="${a}" class="${a === app ? 'active' : ''}">${a[0].toUpperCase() + a.slice(1)} <small>(Level ${student[a + '_level']})</small></button>`).join('');
-    const list = skills.filter(s => s.apparatus === app), L = levelOfApp(student, app);
+    const list = skills.filter(s => s.apparatus === app && !s.general), gen = skills.filter(s => s.apparatus === app && s.general), L = levelOfApp(student, app);
+    const rowHtml = s => { const c = cur(s.id); return `<div class="skill-row"><span class="skill-name">${esc(s.name)}</span><span class="skill-ctl"><select data-skill="${esc(s.id)}"><option value="not_started" ${c.status === 'not_started' ? 'selected' : ''}>Not started</option><option value="learning" ${c.status === 'learning' ? 'selected' : ''}>Learning</option><option value="mastered" ${c.status === 'mastered' ? 'selected' : ''}>Completed</option></select>${datesHtml(s.id, c)}</span></div>`; };
     const editable = l => { const ls = list.filter(s => s.level === l); if (!ls.length) return ''; const done = ls.filter(s => cur(s.id).status === 'mastered').length;
-      return `<div class="lvl"><div class="lvl-head"><b>Level ${l}</b><span class="muted">${done}/${ls.length} completed</span><button type="button" class="btn secondary small" data-all="${l}">Mark all completed today</button></div>${ls.map(s => { const c = cur(s.id); return `<div class="skill-row"><span class="skill-name">${esc(s.name)}</span><span class="skill-ctl"><select data-skill="${esc(s.id)}"><option value="not_started" ${c.status === 'not_started' ? 'selected' : ''}>Not started</option><option value="learning" ${c.status === 'learning' ? 'selected' : ''}>Learning</option><option value="mastered" ${c.status === 'mastered' ? 'selected' : ''}>Completed</option></select>${datesHtml(s.id, c)}</span></div>`; }).join('')}</div>`; };
+      return `<div class="lvl"><div class="lvl-head"><b>Level ${l}</b><span class="muted">${done}/${ls.length} completed</span><button type="button" class="btn secondary small" data-all="${l}">Mark all completed today</button></div>${ls.map(rowHtml).join('')}</div>`; };
     const passed = [1, 2, 3, 4, 5].filter(l => l <= L && list.some(s => s.level === l));
     const later = [1, 2, 3, 4, 5].filter(l => l > L + 1);
-    m.$('#plist').innerHTML = list.length ?
+    m.$('#plist').innerHTML = list.length || gen.length ?
       (passed.length ? `<details class="lvl passed-lvls"><summary class="lvl-head"><b>✓ Level${passed.length > 1 ? 's 1–' + L : ' ' + L} passed</b><span class="muted">${list.filter(s => s.level <= L).length} skills counted as completed</span></summary>${passed.map(l => `<p class="muted section-gap-sm"><b>Level ${l}:</b> ${list.filter(s => s.level === l).map(s => esc(s.name)).join(' · ')}</p>`).join('')}</details>` : '') +
       (L >= 5 ? `<p class="chip ok section-gap-sm">All 5 levels passed on ${app} 🎉</p>` : `<h4>Working on next: Level ${L + 1}</h4>${editable(L + 1) || '<p class="muted">No skills at this level yet.</p>'}`) +
-      (later.some(l => list.some(s => s.level === l)) ? `<details class="section-gap-sm"><summary class="muted">Later levels</summary>${later.map(editable).join('')}</details>` : '')
+      (later.some(l => list.some(s => s.level === l)) ? `<details class="section-gap-sm"><summary class="muted">Later levels</summary>${later.map(editable).join('')}</details>` : '') +
+      (gen.length ? `<div class="lvl"><div class="lvl-head"><b>General skills</b><span class="muted">Not part of a level</span></div>${gen.map(rowHtml).join('')}</div>` : '')
       : empty('📚', 'No skills yet', 'Import the skill list from the Skill library page first.');
     count();
     m.$$('[data-a]').forEach(b => b.onclick = () => { app = b.dataset.a; draw(); });
@@ -367,7 +371,7 @@ function childCard(c) {
     return `<details class="skills-acc"><summary><b>${app[0].toUpperCase() + app.slice(1)}</b> · Level ${lvl}${lvl >= 5 ? ' <span class="muted">— all levels passed 🎉</span>' : at.length ? ` <span class="muted">— working on Level ${next}: ${done}/${at.length} skills completed</span>` : ''}</summary>${lvl < 5 && at.length ? `<div class="bar"><i style="width:${Math.round(done / at.length * 100)}%"></i></div>` : ''}${levels.map(l => `<details ${l === next ? 'open' : ''}><summary class="lv-sum">Level ${l} <span class="muted">${l <= lvl ? '✓ passed' : list.filter(s => s.level === l && st(s) === 'mastered').length + '/' + list.filter(s => s.level === l).length}</span></summary><ul class="skill-list">${list.filter(s => s.level === l).map(item).join('')}</ul></details>`).join('')}</details>`;
   };
   return `<section class="card child"><div class="child-head"><div class="avatar">${c.photo_url ? `<img src="${esc(safeUrl(c.photo_url))}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span>${esc((c.first_name[0] || '') + (c.last_name[0] || ''))}</span></div><div><h2>${esc(nameOf(c))}</h2><p class="muted">${esc(c.center_id ? c.center_id[0].toUpperCase() + c.center_id.slice(1) : '')}</p></div></div>
-  <div class="levels">${['pole', 'rope', 'yoga'].map((k, i) => `<div class="level-box">${window.MFU_SIL ? MFU_SIL.level(k, c[k + '_level'], i) : ''}<small>${k.toUpperCase()}</small><b>Level ${c[k + '_level']}</b>${pips(c[k + '_level'])}</div>`).join('')}</div>
+  <div class="levels">${['pole', 'rope', 'yoga'].map(k => `<div class="level-box"><small>${k.toUpperCase()}</small><b>Level ${c[k + '_level']}</b>${pips(c[k + '_level'])}</div>`).join('')}</div>
   ${c.batches.length ? `<h4>Classes</h4><div class="chips">${c.batches.map(b => `<span class="chip ${b.drop_in ? 'drop' : ''}">${esc(b.name)}${b.days ? ' · ' + esc(b.days) : ''}${b.start_time ? ' · ' + esc(fmtTime(b.start_time)) : ''}${b.drop_in ? ' · drop-in' : ''}</span>`).join('')}</div>` : ''}
   <h4>Skills</h4>${['pole', 'rope', 'yoga'].map(skillBlock).join('') || '<p class="muted">Skill tracking will appear here once your coach starts it.</p>'}
   ${c.routines.filter(r => r.content).map(r => `<details class="skills-acc"><summary><b>${r.apparatus[0].toUpperCase() + r.apparatus.slice(1)} routine</b></summary><pre class="routine">${esc(r.content)}</pre></details>`).join('')}
@@ -375,15 +379,15 @@ function childCard(c) {
 }
 PAGES.home = async () => {
   const d = await loadHome();
-  const next = d.events.slice(0, 3);
+  const next = d.events;
   $('#content').innerHTML = hero('Hello' + (d.parent.name ? ', ' + esc(d.parent.name.split(/\s+/)[0]) : ''), 'Here is how your ' + (d.children.length > 1 ? 'children are' : 'child is') + ' doing.') +
-    (next.length ? `<div class="card next-up"><h3>Coming up</h3>${next.map(e => `<div class="mini-event"><div class="date-chip"><b>${dateObj(e.event_date).getDate()}</b><span>${dateObj(e.event_date).toLocaleDateString('en-US', { month: 'short' })}</span></div><div><b>${esc(e.title)}</b><small>${typeLabel(e.event_type)} · ${esc(fmtTime(e.event_time) || fmtShort(e.event_date))}</small></div>${e.signup_url ? link(e.signup_url, 'Sign up', 'btn small') : `<span class="chip">${countdown(e.event_date)}</span>`}</div>`).join('')}<button class="btn secondary small" data-go="p_events">See all events</button></div>` : '') +
+    (next.length ? `<div class="card next-up"><h3>Coming up</h3>${next.map(e => `<div class="mini-event"><div class="date-chip"><b>${dateObj(e.event_date).getDate()}</b><span>${dateObj(e.event_date).toLocaleDateString('en-US', { month: 'short' })}</span></div><div><b>${esc(e.title)}</b><small>${typeLabel(e.event_type)}${e.going ? ' · your child is in it' : ''} · ${esc(fmtTime(e.event_time) || fmtShort(e.event_date))}</small></div>${e.signup_url ? link(e.signup_url, 'Sign up', 'btn small') : `<span class="chip">${countdown(e.event_date)}</span>`}</div>`).join('')}<button class="btn secondary small" data-go="p_events">See all events</button></div>` : '') +
     (d.children.length ? d.children.map(childCard).join('') : `<div class="card">${empty('👋', 'No children linked yet', 'Ask your coach to link your child to this account.')}</div>`);
   $$('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go));
 };
 PAGES.p_events = async () => {
   const d = state.home || await loadHome();
-  $('#content').innerHTML = hero('Upcoming events', 'Evaluations and competitions for your centers.') + (d.events.length ? d.events.map(eventCardParent).join('') : `<div class="card">${empty('📅', 'Nothing scheduled right now', 'New evaluations and competitions will show up here.')}</div>`);
+  $('#content').innerHTML = hero('Upcoming events', 'Every evaluation, competition and demo on the MFU calendar.') + (d.events.length ? d.events.map(eventCardParent).join('') : `<div class="card">${empty('📅', 'Nothing scheduled right now', 'New evaluations and competitions will show up here.')}</div>`);
 };
 function parentBoard(items, title, sub, shop) {
   const groups = [...new Set(items.map(i => i.category || 'Other'))].sort();

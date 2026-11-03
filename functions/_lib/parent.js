@@ -46,7 +46,7 @@ export async function studentDetail(env, s) {
       env.DB.prepare("SELECT b.name,b.days,b.start_time,b.end_time,0 AS drop_in FROM batch_students bs JOIN batches b ON b.id=bs.batch_id WHERE bs.student_id=? UNION SELECT b.name,b.days,b.start_time,b.end_time,1 FROM student_attendance sa JOIN batches b ON b.id=sa.batch_id WHERE sa.student_id=? AND sa.drop_in=1 AND sa.attendance_date>=date('now','-90 days') AND NOT EXISTS(SELECT 1 FROM batch_students x WHERE x.batch_id=sa.batch_id AND x.student_id=sa.student_id) ORDER BY 1").bind(s.id, s.id),
       env.DB.prepare("SELECT status,COUNT(*) n FROM student_attendance WHERE student_id=? AND attendance_date>=date('now','-90 days') GROUP BY status").bind(s.id),
       env.DB.prepare('SELECT sa.attendance_date,sa.status,sa.drop_in,b.name AS batch FROM student_attendance sa LEFT JOIN batches b ON b.id=sa.batch_id WHERE sa.student_id=? ORDER BY sa.attendance_date DESC LIMIT 8').bind(s.id),
-      env.DB.prepare("SELECT sk.id,sk.apparatus,sk.level,sk.name,sk.description,sk.video_url,COALESCE(p.status,'not_started') AS status,p.started_date,p.mastered_date FROM skills sk LEFT JOIN student_skill_progress p ON p.skill_id=sk.id AND p.student_id=? WHERE COALESCE(sk.active,1)=1 ORDER BY sk.apparatus,sk.level,sk.sort_order,sk.name").bind(s.id),
+      env.DB.prepare("SELECT sk.id,sk.apparatus,sk.level,sk.name,sk.description,sk.video_url,COALESCE(p.status,'not_started') AS status,p.started_date,p.mastered_date FROM skills sk LEFT JOIN student_skill_progress p ON p.skill_id=sk.id AND p.student_id=? WHERE COALESCE(sk.active,1)=1 AND COALESCE(sk.general,0)=0 ORDER BY sk.apparatus,sk.level,sk.sort_order,sk.name").bind(s.id),
       env.DB.prepare('SELECT apparatus,content,photo_url FROM routines WHERE student_id=?').bind(s.id)
     ]);
     const att = { present: 0, late: 0, absent: 0, excused: 0 };
@@ -118,15 +118,16 @@ export async function handleParent(path, method, request, env) {
 
   if (sub === 'home' && method === 'GET') {
     const children = await childrenFor(env, parent.id);
-    const centers = [...new Set(children.map(c => c.center_id).filter(Boolean))];
-    const marks = centers.map(() => '?').join(',');
-    const events = (await env.DB.prepare("SELECT id,title,event_type,event_date,event_time,location,center_id,details,signup_url FROM events WHERE event_date>=date('now','-1 day') AND (center_id IS NULL OR center_id=''" + (centers.length ? ' OR center_id IN (' + marks + ')' : '') + ') ORDER BY event_date,event_time').bind(...centers).all()).results;
+    // Every scheduled event and demo shows to every parent; demos their child is in are marked.
+    const [events, demos] = (await env.DB.batch([
+      env.DB.prepare("SELECT id,title,event_type,event_date,event_time,location,center_id,details,signup_url FROM events WHERE event_date>=date('now','-1 day')"),
+      env.DB.prepare("SELECT id,title,demo_date,start_time,arrive_time,location,details FROM demos WHERE demo_date>=date('now','-1 day')")
+    ])).map(r => r.results);
     const links = (await env.DB.prepare('SELECT id,title,url,category,description FROM links ORDER BY category,title').all()).results;
     const shop = (await env.DB.prepare('SELECT id,title,url,category,price,description FROM shop_items ORDER BY category,title').all()).results;
     const extras = await parentExtras(env, parent, children);
-    // Demos their children are in show up alongside evaluations and competitions.
-    const seen = new Set();
-    for (const c of children) for (const d of c.demos) if (d.demo_date >= new Date(Date.now() - 864e5).toISOString().slice(0, 10) && !seen.has(d.id)) { seen.add(d.id); events.push({ id: d.id, title: d.title, event_type: 'demo', event_date: d.demo_date, event_time: d.start_time, arrive_time: d.arrive_time, location: d.location, details: d.details }); }
+    const going = new Set(children.flatMap(c => c.demos.map(d => d.id)));
+    for (const d of demos) events.push({ id: d.id, title: d.title, event_type: 'demo', event_date: d.demo_date, event_time: d.start_time, arrive_time: going.has(d.id) ? d.arrive_time : null, location: d.location, details: d.details, going: going.has(d.id) });
     events.sort((a, b) => (a.event_date + (a.event_time || '')).localeCompare(b.event_date + (b.event_time || '')));
     const forms = await parentForms(env, parent, children);
     return json({ parent, children, events, links, shop, forms, ...extras });

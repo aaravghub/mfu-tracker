@@ -40,7 +40,7 @@
 
   /* ---------- navigation ---------- */
   const EVENTS_NAV = ['Events', [['calendar', 'Calendar & meetings'], ['evaluations', 'Evaluations'], ['competitions', 'Competition scores'], ['demos', 'Demos'], ['events', 'Event list']]];
-  const MANAGE = [['overview', 'Overview'], ['students', 'Students'], ['batches', 'Batches'], ['coaches', 'Coaches'], ['centers', 'Centers'], ['attendance', 'Attendance'], ['fitness', 'Fitness'], ['exercises', 'Exercises & sets'], ['skills', 'Skill library'], ['routines', 'Routines']];
+  const MANAGE = [['overview', 'Overview'], ['students', 'Students'], ['batches', 'Batches'], ['batch_progress', 'Batch progress'], ['coaches', 'Coaches'], ['centers', 'Centers'], ['attendance', 'Attendance'], ['fitness', 'Fitness'], ['exercises', 'Exercises & sets'], ['skills', 'Skill library'], ['routines', 'Routines']];
   NAV.admin = [['Manage', MANAGE], EVENTS_NAV,
     ['Families', [['parents', 'Parents'], ['requests', 'Parent requests'], ['announcements', 'Announcements'], ['links', 'Links & forms'], ['shop', 'Shop'], ['email', 'Email parents']]],
     ['Tools', [['assistant', 'Skill assistant'], ['coach_accounts', 'Coach accounts'], ['timers', 'Timers']]]];
@@ -55,6 +55,7 @@
   PAGES.overview = async () => {
     await _overview();
     const x = await api('overview-extra').catch(() => null); if (!x) return;
+    const kpi = $('#kpi-att'); if (kpi) kpi.innerHTML = '<span>Attendance, last 30 days</span>' + meter(x.attendance.here, x.attendance.n);
     const items = [...x.demos.map(d => ({ ...d, kind: 'Demo', page: 'demos' })), ...x.meetings.map(m => ({ ...m, kind: 'Meeting', page: 'calendar' }))].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
     if (x.open_requests) $('#content .stats')?.insertAdjacentHTML('beforebegin', `<div class="notice"><div><b>${x.open_requests} open parent request${x.open_requests > 1 ? 's' : ''}</b><br><small>Meeting requests and questions from parents are waiting for a reply.</small></div><button class="btn" data-go="requests">Open requests</button></div>`);
     if (items.length) $('#content').insertAdjacentHTML('beforeend', `<div class="card section-gap"><h3>Demos & meetings</h3>${items.map(i => `<div class="mini-event"><div class="date-chip"><b>${dateObj(i.date).getDate()}</b><span>${dateObj(i.date).toLocaleDateString('en-US', { month: 'short' })}</span></div><div><b>${esc(i.title)}</b><small>${i.kind}${i.start_time ? ' · ' + esc(fmtTime(i.start_time)) : ''}</small></div>${i.meet_url ? link(i.meet_url, 'Join Meet', 'btn small') : `<button class="btn secondary small" data-go="${i.page}">Open</button>`}</div>`).join('')}</div>`);
@@ -751,7 +752,7 @@
       const dots = s.values.map((v, i) => v == null ? '' : `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="4" class="lc-dot"/>`).join('');
       const lastI = s.values.map((v, i) => v == null ? -1 : i).filter(i => i >= 0).pop();
       if (many && series.length <= 4 && lastI != null) ends.push({ k, x: x(lastI) + 8, y: y(s.values[lastI]) + 4, name: s.name.length > 11 ? s.name.slice(0, 10) + '…' : s.name });
-      return `<g class="lc-s s${k + 1}"><path d="${d}" class="lc-line"/>${dots}</g>`;
+      return `<g class="lc-s s${k + 1}"><path d="${d}" pathLength="1" class="lc-line"/>${dots}</g>`;
     }).join('');
     // End-of-line labels: push apart any that would overlap.
     ends.sort((a, b) => a.y - b.y).forEach((e, i, arr) => { if (i && e.y - arr[i - 1].y < 13) e.y = arr[i - 1].y + 13; });
@@ -818,16 +819,17 @@
 
   PAGES.timers = async () => {
     timers();
-    const students = (await api('students')).filter(s => s.active !== 0).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+    const [all, batches] = await Promise.all([api('students'), api('batches')]);
+    const students = all.filter(s => s.active !== 0).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
     // Replace the old rep counter with one that records the time of every tap.
     const old = $('#counter'), card = document.createElement('div');
     card.className = 'timer-card counter'; card.id = 'counter';
-    card.innerHTML = `<div class="timer-label">One-minute timed set</div><select id="rx" aria-label="Exercise" class="rx-select">${EXERCISES.map(([k, l]) => `<option value="${k}" ${state.rx === k ? 'selected' : ''}>${l}</option>`).join('')}</select><div class="timer-display" id="t1">01:00</div><div class="count-value"><span id="count">0</span> reps</div><p class="timer-help">Tap this card (or press the space bar) every time they finish one.</p><div class="timer-actions"><button class="btn" id="start1">Start 1:00</button><button class="btn secondary" id="reset1">Reset</button></div>`;
+    card.innerHTML = `<div class="timer-label">One-minute timed set</div><select id="rx" aria-label="Exercise" class="rx-select">${EXERCISES.map(([k, l]) => `<option value="${k}" ${state.rx === k ? 'selected' : ''}>${l}</option>`).join('')}</select><div class="t-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="t-track" cx="60" cy="60" r="54"/><circle class="t-prog" id="t1ring" cx="60" cy="60" r="54" pathLength="1"/></svg><div class="timer-display" id="t1">01:00</div></div><div class="count-value"><span id="count">0</span> reps</div><p class="timer-help">Tap this card (or press the space bar) every time they finish one.</p><div class="timer-actions"><button class="btn" id="start1">Start 1:00</button><button class="btn secondary" id="reset1">Reset</button></div>`;
     old.replaceWith(card);
-    $('#content').insertAdjacentHTML('beforeend', `<div class="card section-gap" id="rx-result" hidden><h3 id="rx-title"></h3><div id="rx-chart"></div><form id="dsave" class="section-gap"><h4>Save this set</h4><div class="form-grid"><label>Student<input id="ds-search" list="ds-list" placeholder="Type a name..." autocomplete="off" required><datalist id="ds-list">${students.map(s => `<option value="${esc(nameOf(s))}"></option>`).join('')}</datalist></label><label>Count<input type="number" id="ds-count" min="0" required></label><label>Date<input type="date" id="ds-date" value="${todayStr()}" required></label></div><div class="modal-actions"><button type="button" class="btn secondary" id="ds-skip">Don't save</button><button class="btn">Save set</button></div><p class="muted" id="ds-msg"></p></form></div>`);
+    $('#content').insertAdjacentHTML('beforeend', `<div class="card section-gap" id="rx-result" hidden><h3 id="rx-title"></h3><div id="rx-chart"></div><form id="dsave" class="section-gap"><h4>Save this set</h4><div class="form-grid"><label>Batch<select id="ds-batch"><option value="">All students</option>${batches.map(b => `<option value="${esc(b.id)}" ${state.rxBatch === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label><label>Student<select id="ds-student" required></select></label><label>Count<input type="number" id="ds-count" min="0" required></label><label>Date<input type="date" id="ds-date" value="${todayStr()}" required></label></div><div class="modal-actions"><button type="button" class="btn secondary" id="ds-skip">Don't save</button><button class="btn">Save set</button></div><p class="muted" id="ds-msg"></p></form></div>`);
     let taps = [], elapsed = 0, startedAt = 0, running = false, done = false, tick = null;
     const ex = () => $('#rx').value, now = () => elapsed + (running ? performance.now() - startedAt : 0);
-    const paint = () => { const left = Math.min(60, Math.max(0, Math.ceil((60000 - now()) / 1000))); $('#t1').textContent = left === 60 ? '01:00' : '00:' + String(left).padStart(2, '0'); $('#count').textContent = taps.length; };
+    const paint = () => { const left = Math.min(60, Math.max(0, Math.ceil((60000 - now()) / 1000))); $('#t1').textContent = left === 60 ? '01:00' : '00:' + String(left).padStart(2, '0'); $('#t1ring').style.strokeDashoffset = Math.min(1, now() / 60000); if ($('#count').textContent !== String(taps.length)) { $('#count').textContent = taps.length; window.mfuPulse?.($('#count')); } };
     const finish = () => {
       running = false; done = true; clearInterval(tick); elapsed = 60000; paint();
       $('#start1').textContent = 'Finished'; $('#rx').disabled = false;
@@ -845,7 +847,15 @@
       tick = setInterval(() => { if (now() >= 60000) finish(); else paint(); }, 100);
     };
     const tap = () => { if (!running) return; const t = now(); if (t < 60000) { taps.push(Math.round(t)); paint(); } };
-    card.onclick = e => { if (!e.target.closest('button,select')) tap(); };
+    // pointerdown, not click: no tap delay on touch screens, so fast reps are not missed or late.
+    card.onpointerdown = e => { if (!e.target.closest('button,select')) { e.preventDefault(); tap(); } };
+    const fillStudents = async () => {
+      const bid = $('#ds-batch').value; state.rxBatch = bid;
+      const ids = bid ? new Set(await api('batch-students?batch_id=' + encodeURIComponent(bid))) : null;
+      const list = ids ? students.filter(s => ids.has(s.id)) : students;
+      $('#ds-student').innerHTML = '<option value="">Choose a student</option>' + list.map(s => `<option value="${esc(s.id)}">${esc(nameOf(s))}</option>`).join('');
+    };
+    $('#ds-batch').onchange = fillStudents; fillStudents();
     const onKey = e => { if (state.page !== 'timers') return document.removeEventListener('keydown', onKey); if (e.code === 'Space' && running && !e.target.closest('input,textarea,select,button')) { e.preventDefault(); tap(); } };
     document.addEventListener('keydown', onKey);
     $('#start1').onclick = toggle; $('#reset1').onclick = reset;
@@ -853,13 +863,13 @@
     $('#ds-skip').onclick = () => { $('#rx-result').hidden = true; };
     $('#dsave').onsubmit = async e => {
       e.preventDefault();
-      const s = students.find(x => nameOf(x).toLowerCase() === $('#ds-search').value.trim().toLowerCase());
-      if (!s) return toast('Pick a student from the list');
+      const s = students.find(x => x.id === $('#ds-student').value);
+      if (!s) return toast('Choose a student');
       const count = Number($('#ds-count').value);
       try {
         // Keep the tap times only if the count wasn't changed by hand.
-        await api('rep-sessions', { method: 'POST', body: JSON.stringify({ student_id: s.id, exercise: ex(), record_date: $('#ds-date').value, total: count, taps: count === taps.length ? taps : [] }) });
-        $('#ds-msg').textContent = `Saved ${count} ${exName(ex())} reps for ${nameOf(s)} with the pace graph. Parents can see it in their portal.`; toast('Set saved'); $('#ds-search').value = '';
+        await api('rep-sessions', { method: 'POST', body: JSON.stringify({ student_id: s.id, batch_id: $('#ds-batch').value || null, exercise: ex(), record_date: $('#ds-date').value, total: count, taps: count === taps.length ? taps : [] }) });
+        $('#ds-msg').textContent = `Saved ${count} ${exName(ex())} reps for ${nameOf(s)} with the pace graph. Parents can see it in their portal.`; toast('Set saved'); $('#ds-student').value = '';
       } catch (err) { toast(err.message); }
     };
   };
