@@ -13,6 +13,12 @@ Mallakhamb Federation USA management system starter, designed for Cloudflare Pag
 
 Database changes apply automatically on the first request after deploy — nothing to run by hand.
 
+## Batch progress, general skills and speed
+- **Batch progress** (Manage → *Batch progress*): for each batch, the star students of the latest class (2 on pole, 1 on rope) and month-by-month charts of attendance, skills started and completed, and one-minute sets. Stars come from improvement since the previous class: 1 point per extra rep in dasrang, sadhi adhi or pole climb (pole) or rope climb (rope), 3 per skill started and 5 per skill completed.
+- **Timed sets update fitness**: saving a one-minute set also records that day's best count in the student's fitness results.
+- **General skills**: in the Skill library, tick *General skill* for skills you want to track that are not part of a level. They show on each student's skill progress but never count toward a level or an evaluation.
+- **Database reads**: indexes on attendance, timed sets, fitness and rosters mean pages read only the rows they need. Schema checks run once per schema version instead of on every cold start.
+
 ## Coaches, evaluations, meetings and more
 - **Coach accounts**: on *Coach accounts*, click *Create account & invite* for any coach with an email. Coaches sign in on the **Coach** tab and can do everything the admin can except manage coach and parent accounts. Their *My dashboard* shows their batches, students, assigned evaluations, meetings and parent requests.
 - **Calendar & meetings**: a month view of evaluations, competitions, demos and meetings. *New meeting* can create a Google Meet link and Google Calendar invite and email it to coaches, parents (or whole batches) and any other addresses.

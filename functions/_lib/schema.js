@@ -76,8 +76,39 @@ const COLUMNS = [
   ['students', 'gender', 'TEXT'],
   ['coaches', 'dob', 'TEXT'],
   ['coaches', 'gender', 'TEXT'],
-  ['announcements', 'form_id', 'TEXT']
+  ['announcements', 'form_id', 'TEXT'],
+  ['skills', 'general', 'INTEGER DEFAULT 0']
 ];
+
+// D1 bills every row a query scans. These let lookups by student, date or coach read only the matching rows.
+const INDEXES = [
+  'CREATE INDEX IF NOT EXISTS idx_att_student_date ON student_attendance(student_id,attendance_date)',
+  'CREATE INDEX IF NOT EXISTS idx_att_date ON student_attendance(attendance_date)',
+  'CREATE INDEX IF NOT EXISTS idx_att_batch_date ON student_attendance(batch_id,attendance_date)',
+  'CREATE INDEX IF NOT EXISTS idx_coach_att_coach ON coach_attendance(coach_id,attendance_date)',
+  'CREATE INDEX IF NOT EXISTS idx_bs_student ON batch_students(student_id)',
+  'CREATE INDEX IF NOT EXISTS idx_bc_coach ON batch_coaches(coach_id)',
+  'CREATE INDEX IF NOT EXISTS idx_cc_center ON coach_centers(center_id)',
+  'CREATE INDEX IF NOT EXISTS idx_ps_student ON parent_students(student_id)',
+  'CREATE INDEX IF NOT EXISTS idx_rep_student_date ON rep_sessions(student_id,record_date)',
+  'CREATE INDEX IF NOT EXISTS idx_rep_date ON rep_sessions(record_date)',
+  'CREATE INDEX IF NOT EXISTS idx_fit_student_metric ON fitness_records(student_id,metric,record_date)',
+  'CREATE INDEX IF NOT EXISTS idx_fit_date ON fitness_records(record_date)',
+  'CREATE INDEX IF NOT EXISTS idx_ssp_skill ON student_skill_progress(skill_id)',
+  'CREATE INDEX IF NOT EXISTS idx_notes_student ON student_notes(student_id,created_at)',
+  'CREATE INDEX IF NOT EXISTS idx_photos_student ON student_photos(student_id)',
+  'CREATE INDEX IF NOT EXISTS idx_demo_students_student ON demo_students(student_id)',
+  'CREATE INDEX IF NOT EXISTS idx_ep_student ON eval_participants(student_id)',
+  'CREATE INDEX IF NOT EXISTS idx_er_student ON eval_reports(student_id)',
+  'CREATE INDEX IF NOT EXISTS idx_comp_student ON comp_scores(student_id)',
+  'CREATE INDEX IF NOT EXISTS idx_home_student ON home_assignments(student_id)',
+  'CREATE INDEX IF NOT EXISTS idx_form_resp_form ON form_responses(form_id)',
+  'CREATE INDEX IF NOT EXISTS idx_requests_parent ON parent_requests(parent_id)',
+  'CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)'
+];
+
+// Bump when STATEMENTS, COLUMNS or INDEXES change. A cold start then costs one read instead of ~90 queries.
+const SCHEMA_VERSION = '2026-11-03.1';
 
 // The original sessions table only allowed admin and parent roles. Rebuild it once so coach sessions fit, keeping everyone signed in.
 async function upgradeSessions(env) {
@@ -109,6 +140,9 @@ async function upgradeEvalResults(env) {
 export function ensureSchema(env) {
   if (!ready) {
     ready = (async () => {
+      await env.DB.prepare('CREATE TABLE IF NOT EXISTS schema_meta (k TEXT PRIMARY KEY, v TEXT)').run();
+      const cur = await env.DB.prepare("SELECT v FROM schema_meta WHERE k='version'").first();
+      if (cur?.v === SCHEMA_VERSION) return;
       for (const sql of STATEMENTS) await env.DB.prepare(sql).run();
       await upgradeSessions(env);
       for (const [table, col, def] of COLUMNS) {
@@ -116,6 +150,8 @@ export function ensureSchema(env) {
         if (have.length && !have.includes(col)) await env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`).run();
       }
       await upgradeEvalResults(env);
+      for (const sql of INDEXES) await env.DB.prepare(sql).run();
+      await env.DB.prepare("INSERT INTO schema_meta(k,v) VALUES('version',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v").bind(SCHEMA_VERSION).run();
     })().catch(e => { ready = null; throw e; });
   }
   return ready;

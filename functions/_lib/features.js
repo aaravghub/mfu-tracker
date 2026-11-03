@@ -475,6 +475,7 @@ export async function handleFeatures(path, method, request, env, url, actor) {
     }
     if (method === 'DELETE' && id) { await env.DB.prepare('DELETE FROM fitness_records WHERE id=?').bind(id).run(); return json({ ok: true }); }
   }
+  const REP_TO_FITNESS = 'INSERT INTO fitness_records(id,student_id,batch_id,record_date,metric,value,added_by) SELECT ?1,student_id,?2,record_date,exercise,MAX(total),?3 FROM rep_sessions WHERE student_id=?4 AND record_date=?5 AND exercise=?6 GROUP BY student_id,record_date,exercise ON CONFLICT(student_id,record_date,metric) DO UPDATE SET value=excluded.value,batch_id=COALESCE(excluded.batch_id,batch_id)';
   if (root === 'rep-sessions') {
     if (method === 'GET') return json((await all(env, 'SELECT * FROM rep_sessions WHERE student_id=? ORDER BY record_date DESC,created_at DESC LIMIT 100', q('student_id') || '')).map(r => ({ ...r, taps: parseList(r.taps) })));
     if (method === 'POST') {
@@ -485,13 +486,19 @@ export async function handleFeatures(path, method, request, env, url, actor) {
       const rid = crypto.randomUUID();
       const res = await env.DB.batch([
         env.DB.prepare('INSERT INTO rep_sessions(id,student_id,exercise,record_date,total,duration,taps,added_by) SELECT ?,id,?,?,?,?,?,? FROM students WHERE id=?').bind(rid, body.exercise, body.record_date, total, duration, JSON.stringify(taps), by, body.student_id),
-        // The latest count also lands in fitness so it shows with the other results.
-        ...fitnessStmts(body.student_id, body.record_date, null, { [body.exercise]: total })
+        // The day's best count lands in fitness, so a second, slower try never lowers the result.
+        env.DB.prepare(REP_TO_FITNESS).bind(crypto.randomUUID(), body.batch_id || null, by, body.student_id, body.record_date, body.exercise)
       ]);
       if (!res[0].meta.changes) return json({ error: 'Student not found.' }, 404);
       return json({ ok: true, id: rid }, 201);
     }
-    if (method === 'DELETE' && id) { await env.DB.prepare('DELETE FROM rep_sessions WHERE id=?').bind(id).run(); return json({ ok: true }); }
+    if (method === 'DELETE' && id) {
+      const r = await env.DB.prepare('SELECT student_id,record_date,exercise FROM rep_sessions WHERE id=?').bind(id).first();
+      await env.DB.prepare('DELETE FROM rep_sessions WHERE id=?').bind(id).run();
+      // Keep fitness in step: the best remaining set of that day, if any.
+      if (r) await env.DB.prepare(REP_TO_FITNESS).bind(crypto.randomUUID(), null, by, r.student_id, r.record_date, r.exercise).run();
+      return json({ ok: true });
+    }
   }
   if (root === 'fitness-batch') {
     if (method === 'GET') {
@@ -619,12 +626,13 @@ export async function handleFeatures(path, method, request, env, url, actor) {
 
   // ---- small counters for the admin overview ----
   if (root === 'overview-extra' && method === 'GET') {
-    const [req, demos, meetings] = await env.DB.batch([
+    const [req, demos, meetings, att] = await env.DB.batch([
       env.DB.prepare("SELECT COUNT(*) n FROM parent_requests WHERE status='open'"),
       env.DB.prepare("SELECT id,title,demo_date AS date,start_time FROM demos WHERE demo_date>=date('now') ORDER BY demo_date LIMIT 5"),
-      env.DB.prepare("SELECT id,title,meeting_date AS date,start_time,meet_url FROM meetings WHERE meeting_date>=date('now') ORDER BY meeting_date,start_time LIMIT 5")
+      env.DB.prepare("SELECT id,title,meeting_date AS date,start_time,meet_url FROM meetings WHERE meeting_date>=date('now') ORDER BY meeting_date,start_time LIMIT 5"),
+      env.DB.prepare("SELECT COALESCE(SUM(status IN ('present','late')),0) AS here,COUNT(*) AS n FROM student_attendance WHERE attendance_date>=date('now','-30 days')")
     ]);
-    return json({ open_requests: req.results[0].n, demos: demos.results, meetings: meetings.results });
+    return json({ open_requests: req.results[0].n, demos: demos.results, meetings: meetings.results, attendance: att.results[0] });
   }
 
   return null;

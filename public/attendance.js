@@ -28,9 +28,9 @@
     const list = document.createElement('div');
     host.replaceChildren(sumEl, list);
     const summary = () => {
-      const c = { present: 0, late: 0, absent: 0, excused: 0, drop: 0 };
-      batches.forEach(b => b.students.forEach(s => { c[s.status]++; if (s.drop_in) c.drop++; }));
-      sumEl.innerHTML = STAT.map(k => `<span class="chip s-${k}">${c[k]} ${k}</span>`).join('') + (c.drop ? `<span class="chip drop">${c.drop} drop-in${c.drop > 1 ? 's' : ''}</span>` : '');
+      const c = { present: 0, late: 0, absent: 0, excused: 0, drop: 0, open: 0 };
+      batches.forEach(b => b.students.forEach(s => { if (STAT.includes(s.status)) c[s.status]++; else c.open++; if (s.drop_in) c.drop++; }));
+      sumEl.innerHTML = STAT.map(k => `<span class="chip s-${k}">${c[k]} ${k}</span>`).join('') + (c.open ? `<span class="chip s-open">${c.open} not marked</span>` : '') + (c.drop ? `<span class="chip drop">${c.drop} drop-in${c.drop > 1 ? 's' : ''}</span>` : '');
     };
     const draw = () => {
       list.innerHTML = batches.length ? batches.map((b, bi) => {
@@ -38,11 +38,15 @@
         const taken = new Set(b.students.map(s => s.student_id));
         const opts = people.filter(p => !taken.has(p.id)).map(p => `<option value="${esc(p.id)}">${esc(nameOf(p))} · ${esc(centerName(centers, p.center_id))}</option>`).join('');
         return `<section class="card att-batch"><div class="att-head"><div><h3>${esc(b.name)}</h3><small class="muted">${esc(batchWhen(b)) || '&nbsp;'}</small></div><span class="att-count"><b>${pres}</b>/${total}</span><div class="att-tools"><button type="button" class="btn secondary small" data-all="present" data-bi="${bi}">All present</button><button type="button" class="btn secondary small" data-all="absent" data-bi="${bi}">All absent</button></div></div>
-          ${total ? `<div class="table-wrap"><table><tbody>${b.students.map((s, si) => `<tr class="${s.drop_in ? 'drop-row' : ''}"><td><b>${esc(s.first_name + ' ' + s.last_name)}</b>${s.drop_in ? ' <span class="chip drop">Drop-in</span>' : ''}${s.saved ? '' : ' <i class="unsaved" title="Not saved yet"></i>'}</td><td><select data-st data-bi="${bi}" data-si="${si}">${STAT.map(k => `<option value="${k}" ${k === s.status ? 'selected' : ''}>${cap(k)}</option>`).join('')}</select></td><td class="att-x">${s.drop_in ? `<button type="button" class="icon-btn" data-rm data-bi="${bi}" data-si="${si}" aria-label="Remove drop-in">✕</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Nobody is on this batch yet. Add them in Batches, or add a drop-in below.</p>'}
+          ${total ? `<div class="table-wrap"><table><tbody>${b.students.map((s, si) => `<tr class="${s.drop_in ? 'drop-row' : ''}"><td><b>${esc(s.first_name + ' ' + s.last_name)}</b>${s.drop_in ? ' <span class="chip drop">Drop-in</span>' : ''}${s.saved ? '' : ' <i class="unsaved" title="Not saved yet"></i>'}</td><td><div class="att-marks" role="radiogroup" aria-label="${esc(s.first_name + ' ' + s.last_name)}">${STAT.map(k => `<button type="button" role="radio" class="att-mark m-${k}" aria-checked="${k === s.status}" data-st="${k}" data-bi="${bi}" data-si="${si}">${cap(k)}</button>`).join('')}</div></td><td class="att-x">${s.drop_in ? `<button type="button" class="icon-btn" data-rm data-bi="${bi}" data-si="${si}" aria-label="Remove drop-in">✕</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Nobody is on this batch yet. Add them in Batches, or add a drop-in below.</p>'}
           <div class="att-add"><select data-add data-bi="${bi}"><option value="">+ Add a drop-in student…</option>${opts}</select></div></section>`;
       }).join('') : empty('🗓️', 'Nothing to show', 'There are no batches here yet.');
       summary();
-      list.querySelectorAll('[data-st]').forEach(sel => sel.onchange = () => { batches[+sel.dataset.bi].students[+sel.dataset.si].status = sel.value; list.querySelectorAll('.att-count')[+sel.dataset.bi].firstChild.textContent = batches[+sel.dataset.bi].students.filter(s => here(s.status)).length; summary(); });
+      list.querySelectorAll('[data-st]').forEach(btn => btn.onclick = () => {
+        const bi = +btn.dataset.bi; batches[bi].students[+btn.dataset.si].status = btn.dataset.st;
+        btn.parentElement.querySelectorAll('[data-st]').forEach(x => x.setAttribute('aria-checked', String(x === btn)));
+        list.querySelectorAll('.att-count')[bi].firstChild.textContent = batches[bi].students.filter(s => here(s.status)).length; summary();
+      });
       list.querySelectorAll('[data-all]').forEach(b => b.onclick = () => { batches[+b.dataset.bi].students.forEach(s => { s.status = b.dataset.all; }); draw(); });
       list.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { const bt = batches[+b.dataset.bi], s = bt.students[+b.dataset.si]; if (s.saved) (bt.removed ||= []).push(s.student_id); bt.students.splice(+b.dataset.si, 1); draw(); });
       list.querySelectorAll('[data-add]').forEach(sel => sel.onchange = () => {
@@ -56,7 +60,7 @@
     };
     draw();
     return {
-      payload: () => batches.map(b => ({ batch_id: b.id, records: b.students.map(s => ({ student_id: s.student_id, status: s.status })), remove: b.removed || [] }))
+      payload: () => batches.map(b => ({ batch_id: b.id, records: b.students.filter(s => STAT.includes(s.status)).map(s => ({ student_id: s.student_id, status: s.status })), remove: b.removed || [] }))
     };
   }
 

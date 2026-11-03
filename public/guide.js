@@ -78,7 +78,7 @@
     $('#hdr-logout').hidden = !on;
     $('#refresh-btn').hidden = !on;
     const tabs = on ? TABS[state.role] || [] : [];
-    $('#tabbar').innerHTML = tabs.map(([p, i, l]) => `<button type="button" data-tab="${p}" class="${state.page === p || (p === 'students' && state.page === 'student') ? 'active' : ''}"><span class="ti" aria-hidden="true">${i}</span>${l}</button>`).join('') + (on ? '<button type="button" data-tab="__menu"><span class="ti" aria-hidden="true">☰</span>More</button>' : '');
+    $('#tabbar').innerHTML = tabs.map(([p, i, l]) => `<button type="button" data-tab="${p}" class="${state.page === p || (p === 'students' && state.page === 'student') ? 'active' : ''}">${l}</button>`).join('') + (on ? '<button type="button" data-tab="__menu">Menu</button>' : '');
   }
   $('#tabbar').onclick = e => {
     const b = e.target.closest('[data-tab]'); if (!b) return;
@@ -224,7 +224,7 @@
   brand.onclick = goHome; brand.onkeydown = e => { if (e.key === 'Enter') goHome(); };
 
   /* ---------- search every page, option and student from the top of the sidebar ---------- */
-  brand.insertAdjacentHTML('afterend', '<div class="side-search"><span class="nav-ic" aria-hidden="true">🔎</span><input id="site-search" type="search" placeholder="Search…" aria-label="Search pages, options and students" autocomplete="off"><kbd>Ctrl K</kbd><div id="ss-results" role="listbox" hidden></div></div>');
+  brand.insertAdjacentHTML('afterend', '<div class="side-search"><input id="site-search" type="search" placeholder="Search…" aria-label="Search pages, options and students" autocomplete="off"><kbd>Ctrl K</kbd><div id="ss-results" role="listbox" hidden></div></div>');
   // Extra words that lead to a page, so people can type what they want to do.
   const OPTIONS = [
     ['students', 'Add a student · import CSV · levels · profiles'], ['attendance', 'Take attendance · drop-ins · monthly report'], ['evaluations', 'Run an evaluation · Google Sheet · evaluators'],
@@ -257,8 +257,8 @@
     if (e.key === 'Escape') { ssInput.value = ''; ssBox.hidden = true; ssInput.blur(); }
   });
   ssBox.addEventListener('mousedown', e => { const b = e.target.closest('[data-i]'); if (b) { e.preventDefault(); ssPick(+b.dataset.i); } });
-  ssInput.addEventListener('blur', () => setTimeout(() => { ssBox.hidden = true; document.body.classList.remove('rail-peek'); }, 150));
-  document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && state.role) { e.preventDefault(); document.body.classList.add('rail-peek'); if (innerWidth <= 850) document.body.classList.add('nav-open'); ssInput.focus(); } });
+  ssInput.addEventListener('blur', () => setTimeout(() => { ssBox.hidden = true; }, 150));
+  document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && state.role) { e.preventDefault(); if (innerWidth <= 850) document.body.classList.add('nav-open'); ssInput.focus(); } });
 
   /* ---------- sign out after 20 minutes without activity (the server enforces the same limit) ---------- */
   const IDLE_MS = 20 * 60 * 1000, WARN_MS = 19 * 60 * 1000;
@@ -271,27 +271,9 @@
     else if (idle > WARN_MS && !warned) { warned = true; toast('You will be signed out in 1 minute unless you do something.'); }
   }, 15000);
 
-  /* ---------- sidebar: a slim icon rail that slides open when the cursor is over it ---------- */
-  const ICONS = { overview: '🏠', coach_home: '🏠', home: '🏠', students: '🧒', batches: '👥', coaches: '🧑‍🏫', centers: '📍', attendance: '✅', fitness: '💪', exercises: '🏋️', skills: '📚', routines: '📝', calendar: '📅', evaluations: '📋', competitions: '🏆', demos: '🎪', events: '🗓️', parents: '👪', requests: '💬', announcements: '📣', signups: '📝', forms: '🗒️', p_forms: '🗒️', links: '🔗', shop: '🛍️', email: '✉️', assistant: '🤖', coach_accounts: '🔑', timers: '⏱️', c_account: '👤', account: '👤', p_skills: '📚', p_practice: '🏠', p_announcements: '📣', p_events: '📅', p_contact: '💬', p_links: '🔗', p_shop: '🛍️' };
-  const decorateNav = () => $$('#nav button[data-page]').forEach(b => { if (b.querySelector('.nav-ic')) return; const t = b.textContent; b.title = t; b.innerHTML = `<span class="nav-ic" aria-hidden="true">${ICONS[b.dataset.page] || '•'}</span><span class="nav-tx">${esc(t)}</span>`; });
-  const store = (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } };
-  const read = k => { try { return localStorage.getItem(k); } catch { return null; } };
-  $('#logout').insertAdjacentHTML('beforebegin', '<button id="rail-pin" type="button" class="side-tool"></button><button id="perf-btn" type="button" class="side-tool" title="Turn off animations and glass effects so the site runs faster"></button>');
-  const setRail = on => { document.body.classList.toggle('rail', on); $('#rail-pin').title = on ? 'Keep the menu open' : 'Let the menu slide away'; $('#rail-pin').innerHTML = `<span class="nav-ic" aria-hidden="true">${on ? '📌' : '◀'}</span><span class="nav-tx">${on ? 'Keep menu open' : 'Auto-hide menu'}</span>`; };
-  setRail(read('mfu-rail') !== 'open');
-  $('#rail-pin').onclick = () => { const on = !document.body.classList.contains('rail'); setRail(on); store('mfu-rail', on ? 'rail' : 'open'); };
-
-  /* ---------- fast mode for slower laptops: no glass blur, no moving background, no page-warp animation ---------- */
-  const setLite = on => { document.documentElement.classList.toggle('lite', on); $('#perf-btn').innerHTML = `<span class="nav-ic" aria-hidden="true">⚡</span><span class="nav-tx">Fast mode: ${on ? 'on' : 'off'}</span>`; };
-  const saved = read('mfu-perf');
-  setLite(saved ? saved === 'fast' : (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4);
-  $('#perf-btn').onclick = () => { const on = !document.documentElement.classList.contains('lite'); setLite(on); store('mfu-perf', on ? 'fast' : 'pretty'); toast(on ? 'Fast mode on — effects turned off' : 'Fast mode off'); };
-  // If frames are slow and the person hasn't chosen, switch to fast mode automatically.
-  if (!saved && !document.documentElement.classList.contains('lite')) {
-    let frames = 0, slow = 0, last = 0;
-    const probe = now => { if (last && now - last > 34) slow++; last = now; if (++frames < 90) requestAnimationFrame(probe); else if (slow > 30) { setLite(true); toast('Fast mode is on because this computer seemed slow. You can turn it off at the bottom of the menu.'); } };
-    setTimeout(() => { if (document.visibilityState === 'visible') requestAnimationFrame(probe); }, 3000);
-  }
+  /* ---------- sidebar labels (plain text: no icon rail, no effects to switch off) ---------- */
+  const decorateNav = () => $$('#nav button[data-page]').forEach(b => { if (b.querySelector('.nav-tx')) return; const t = b.textContent; b.innerHTML = `<span class="nav-tx">${esc(t)}</span>`; });
+  try { localStorage.removeItem('mfu-rail'); localStorage.removeItem('mfu-perf'); } catch { /* private mode */ }
 
   /* ---------- hook into sign-in: reset history, show buttons, play the tour on first sign-in ---------- */
   const _setRole = setRole;
