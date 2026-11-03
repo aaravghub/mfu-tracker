@@ -10,13 +10,25 @@ const nextMonth = m => { let [y, mo] = m.split('-').map(Number); mo++; if (mo > 
 const UPSERT = "INSERT INTO student_attendance(id,batch_id,student_id,attendance_date,status,drop_in) VALUES(?,?,?,?,?,CASE WHEN EXISTS(SELECT 1 FROM batch_students WHERE batch_id=? AND student_id=?) THEN 0 ELSE 1 END) ON CONFLICT(batch_id,student_id,attendance_date) DO UPDATE SET status=excluded.status";
 const REMOVE = 'DELETE FROM student_attendance WHERE batch_id=? AND student_id=? AND attendance_date=? AND drop_in=1';
 
-function stmtsFor(env, batchId, date, records, remove) {
+// Coaches: the same marks in coach_attendance. A coach not assigned to the batch is a drop-in, worked out on read.
+const COACH_UPSERT = 'INSERT INTO coach_attendance(id,batch_id,coach_id,attendance_date,status) SELECT ?,?,id,?,? FROM coaches WHERE id=? ON CONFLICT(batch_id,coach_id,attendance_date) DO UPDATE SET status=excluded.status';
+const COACH_REMOVE = 'DELETE FROM coach_attendance WHERE batch_id=?1 AND coach_id=?2 AND attendance_date=?3 AND NOT EXISTS(SELECT 1 FROM batch_coaches WHERE batch_id=?1 AND coach_id=?2)';
+const COACH_SQL = "SELECT bc.batch_id,c.id AS coach_id,c.name,ca.status,(ca.status IS NOT NULL) AS saved,0 AS drop_in FROM batch_coaches bc JOIN coaches c ON c.id=bc.coach_id JOIN batches b ON b.id=bc.batch_id LEFT JOIN coach_attendance ca ON ca.coach_id=c.id AND ca.batch_id=bc.batch_id AND ca.attendance_date=? WHERE COALESCE(c.active,1)=1 AND ";
+const COACH_DROPIN_SQL = "SELECT ca.batch_id,c.id AS coach_id,c.name,ca.status,1 AS saved,1 AS drop_in FROM coach_attendance ca JOIN coaches c ON c.id=ca.coach_id JOIN batches b ON b.id=ca.batch_id WHERE ca.attendance_date=? AND NOT EXISTS(SELECT 1 FROM batch_coaches x WHERE x.batch_id=ca.batch_id AND x.coach_id=ca.coach_id) AND ";
+const coachShape = r => ({ coach_id: r.coach_id, name: r.name, status: r.saved ? r.status : '', saved: !!r.saved, drop_in: !!r.drop_in });
+
+function stmtsFor(env, batchId, date, records, remove, coaches, removeCoaches) {
   const out = [];
   for (const r of records || []) {
     if (!r || typeof r.student_id !== 'string' || !STATUSES.has(r.status)) throw new Error('Each attendance record needs a student and a valid status.');
     out.push(env.DB.prepare(UPSERT).bind(crypto.randomUUID(), batchId, r.student_id, date, r.status, batchId, r.student_id));
   }
   for (const sid of remove || []) if (typeof sid === 'string') out.push(env.DB.prepare(REMOVE).bind(batchId, sid, date));
+  for (const r of coaches || []) {
+    if (!r || typeof r.coach_id !== 'string' || !STATUSES.has(r.status)) throw new Error('Each coach record needs a coach and a valid status.');
+    out.push(env.DB.prepare(COACH_UPSERT).bind(crypto.randomUUID(), batchId, date, r.status, r.coach_id));
+  }
+  for (const cid of removeCoaches || []) if (typeof cid === 'string') out.push(env.DB.prepare(COACH_REMOVE).bind(batchId, cid, date));
   return out;
 }
 
@@ -35,19 +47,21 @@ export async function handleAttendance(path, method, request, env, url, body) {
   if (root === 'attendance' && method === 'GET') {
     const batchId = q('batch_id'), date = q('date');
     if (!batchId || !validDate(date)) return json({ error: 'batch_id and a valid date are required' }, 400);
-    const [a, b] = await env.DB.batch([
+    const [a, b, c, d] = await env.DB.batch([
       env.DB.prepare(ROSTER_SQL + 'bs.batch_id=?').bind(date, batchId),
-      env.DB.prepare(DROPIN_SQL + 'sa.batch_id=?').bind(date, batchId)
+      env.DB.prepare(DROPIN_SQL + 'sa.batch_id=?').bind(date, batchId),
+      env.DB.prepare(COACH_SQL + 'bc.batch_id=?').bind(date, batchId),
+      env.DB.prepare(COACH_DROPIN_SQL + 'ca.batch_id=?').bind(date, batchId)
     ]);
-    return json([...a.results, ...b.results].map(shape).sort(byName));
+    return json({ students: [...a.results, ...b.results].map(shape).sort(byName), coaches: [...c.results, ...d.results].map(coachShape).sort((x, y) => x.name.localeCompare(y.name)) });
   }
   if (root === 'attendance' && method === 'POST') {
     if (!body || !body.batch_id || !validDate(body.date) || !Array.isArray(body.records)) return json({ error: 'batch_id, a valid date and records are required' }, 400);
     if (body.records.length > 500) return json({ error: 'Too many records at once.' }, 400);
     try {
-      const st = stmtsFor(env, body.batch_id, body.date, body.records, body.remove);
+      const st = stmtsFor(env, body.batch_id, body.date, body.records, body.remove, body.coaches, body.remove_coaches);
       if (st.length) await env.DB.batch(st);
-      return json({ ok: true, saved: body.records.length });
+      return json({ ok: true, saved: body.records.length, coaches: (body.coaches || []).length });
     } catch (e) { return json({ error: String(e.message || 'Could not save attendance.') }, 400); }
   }
 
@@ -55,13 +69,15 @@ export async function handleAttendance(path, method, request, env, url, body) {
   if (root === 'attendance-center' && method === 'GET') {
     const centerId = q('center_id'), date = q('date');
     if (!centerId || !validDate(date)) return json({ error: 'center_id and a valid date are required' }, 400);
-    const [bs, a, b] = await env.DB.batch([
+    const [bs, a, b, c, d] = await env.DB.batch([
       env.DB.prepare("SELECT id,name,days,start_time,end_time FROM batches WHERE center_id=? AND COALESCE(active,1)=1 ORDER BY name").bind(centerId),
       env.DB.prepare(ROSTER_SQL + 'b.center_id=? AND COALESCE(b.active,1)=1').bind(date, centerId),
-      env.DB.prepare(DROPIN_SQL + 'b.center_id=?').bind(date, centerId)
+      env.DB.prepare(DROPIN_SQL + 'b.center_id=?').bind(date, centerId),
+      env.DB.prepare(COACH_SQL + 'b.center_id=? AND COALESCE(b.active,1)=1').bind(date, centerId),
+      env.DB.prepare(COACH_DROPIN_SQL + 'b.center_id=?').bind(date, centerId)
     ]);
-    const rows = [...a.results, ...b.results];
-    return json({ batches: bs.results.map(x => ({ ...x, students: rows.filter(r => r.batch_id === x.id).map(shape).sort(byName) })) });
+    const rows = [...a.results, ...b.results], crows = [...c.results, ...d.results];
+    return json({ batches: bs.results.map(x => ({ ...x, students: rows.filter(r => r.batch_id === x.id).map(shape).sort(byName), coaches: crows.filter(r => r.batch_id === x.id).map(coachShape).sort((p, q) => p.name.localeCompare(q.name)) })) });
   }
   if (root === 'attendance-center' && method === 'POST') {
     if (!body || !validDate(body.date) || !Array.isArray(body.batches)) return json({ error: 'A valid date and batches are required' }, 400);
@@ -71,7 +87,7 @@ export async function handleAttendance(path, method, request, env, url, body) {
       for (const b of body.batches) {
         if (!b || typeof b.batch_id !== 'string') continue;
         total += (b.records || []).length;
-        st.push(...stmtsFor(env, b.batch_id, body.date, b.records, b.remove));
+        st.push(...stmtsFor(env, b.batch_id, body.date, b.records, b.remove, b.coaches, b.remove_coaches));
       }
       if (total > 800) return json({ error: 'Too many records at once.' }, 400);
       for (let i = 0; i < st.length; i += 90) await env.DB.batch(st.slice(i, i + 90));

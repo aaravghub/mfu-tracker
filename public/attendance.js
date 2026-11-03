@@ -23,7 +23,9 @@
   const monthNav = (m, id = 'mn') => `<div class="month-nav" id="${id}"><button type="button" class="btn secondary small" data-mv="-1" aria-label="Previous month">‹</button><b>${monthLabel(m)}</b><button type="button" class="btn secondary small" data-mv="1" aria-label="Next month">›</button></div>`;
 
   /* ---------- roster editor: one card per batch, shared by "By center" and "By batch" ---------- */
-  function rosterEditor(host, batches, people, centers) {
+  function rosterEditor(host, batches, people, centers, staff) {
+    // One row of Present / Late / Absent / Excused for a student or a coach.
+    const marks = (key, bi, i, cur, label) => `<div class="att-marks" role="radiogroup" aria-label="${esc(label)}">${STAT.map(k => `<button type="button" role="radio" class="att-mark m-${k}" aria-checked="${k === cur}" data-${key}="${k}" data-bi="${bi}" data-i="${i}">${cap(k)}</button>`).join('')}</div>`;
     const sumEl = document.createElement('div'); sumEl.className = 'att-sum';
     const list = document.createElement('div');
     host.replaceChildren(sumEl, list);
@@ -38,17 +40,29 @@
         const taken = new Set(b.students.map(s => s.student_id));
         const opts = people.filter(p => !taken.has(p.id)).map(p => `<option value="${esc(p.id)}">${esc(nameOf(p))} · ${esc(centerName(centers, p.center_id))}</option>`).join('');
         return `<section class="card att-batch"><div class="att-head"><div><h3>${esc(b.name)}</h3><small class="muted">${esc(batchWhen(b)) || '&nbsp;'}</small></div><span class="att-count"><b>${pres}</b>/${total}</span><div class="att-tools"><button type="button" class="btn secondary small" data-all="present" data-bi="${bi}">All present</button><button type="button" class="btn secondary small" data-all="absent" data-bi="${bi}">All absent</button></div></div>
-          ${total ? `<div class="table-wrap"><table><tbody>${b.students.map((s, si) => `<tr class="${s.drop_in ? 'drop-row' : ''}"><td><b>${esc(s.first_name + ' ' + s.last_name)}</b>${s.drop_in ? ' <span class="chip drop">Drop-in</span>' : ''}${s.saved ? '' : ' <i class="unsaved" title="Not saved yet"></i>'}</td><td><div class="att-marks" role="radiogroup" aria-label="${esc(s.first_name + ' ' + s.last_name)}">${STAT.map(k => `<button type="button" role="radio" class="att-mark m-${k}" aria-checked="${k === s.status}" data-st="${k}" data-bi="${bi}" data-si="${si}">${cap(k)}</button>`).join('')}</div></td><td class="att-x">${s.drop_in ? `<button type="button" class="icon-btn" data-rm data-bi="${bi}" data-si="${si}" aria-label="Remove drop-in">✕</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Nobody is on this batch yet. Add them in Batches, or add a drop-in below.</p>'}
-          <div class="att-add"><select data-add data-bi="${bi}"><option value="">+ Add a drop-in student…</option>${opts}</select></div></section>`;
+          ${total ? `<div class="table-wrap"><table><tbody>${b.students.map((s, si) => `<tr class="${s.drop_in ? 'drop-row' : ''}"><td><b>${esc(s.first_name + ' ' + s.last_name)}</b>${s.drop_in ? ' <span class="chip drop">Drop-in</span>' : ''}${s.saved ? '' : ' <i class="unsaved" title="Not saved yet"></i>'}</td><td>${marks('st', bi, si, s.status, s.first_name + ' ' + s.last_name)}</td><td class="att-x">${s.drop_in ? `<button type="button" class="icon-btn" data-rm data-bi="${bi}" data-si="${si}" aria-label="Remove drop-in">✕</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Nobody is on this batch yet. Add them in Batches, or add a drop-in below.</p>'}
+          <div class="att-add"><select data-add data-bi="${bi}"><option value="">+ Add a drop-in student…</option>${opts}</select></div>
+          <h4>Coaches <span class="muted">${b.coaches.filter(c => here(c.status)).length}/${b.coaches.length} here</span></h4>
+          ${b.coaches.length ? `<div class="table-wrap"><table><tbody>${b.coaches.map((c, ci) => `<tr class="${c.drop_in ? 'drop-row' : ''}"><td><b>${esc(c.name)}</b>${c.drop_in ? ' <span class="chip drop">Drop-in</span>' : ''}${c.saved ? '' : ' <i class="unsaved" title="Not saved yet"></i>'}</td><td>${marks('cst', bi, ci, c.status, c.name)}</td><td class="att-x">${c.drop_in ? `<button type="button" class="icon-btn" data-crm data-bi="${bi}" data-i="${ci}" aria-label="Remove drop-in coach">✕</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">No coaches are assigned to this batch. Assign them in Batches, or add a drop-in coach below.</p>'}
+          <div class="att-add"><select data-cadd data-bi="${bi}"><option value="">+ Add a drop-in coach…</option>${staff.filter(c => !b.coaches.some(x => x.coach_id === c.id)).map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></div></section>`;
       }).join('') : empty('🗓️', 'Nothing to show', 'There are no batches here yet.');
       summary();
+      list.querySelectorAll('[data-cst]').forEach(btn => btn.onclick = () => { batches[+btn.dataset.bi].coaches[+btn.dataset.i].status = btn.dataset.cst; draw(); });
       list.querySelectorAll('[data-st]').forEach(btn => btn.onclick = () => {
-        const bi = +btn.dataset.bi; batches[bi].students[+btn.dataset.si].status = btn.dataset.st;
+        const bi = +btn.dataset.bi; batches[bi].students[+btn.dataset.i].status = btn.dataset.st;
         btn.parentElement.querySelectorAll('[data-st]').forEach(x => x.setAttribute('aria-checked', String(x === btn)));
         list.querySelectorAll('.att-count')[bi].firstChild.textContent = batches[bi].students.filter(s => here(s.status)).length; summary();
       });
-      list.querySelectorAll('[data-all]').forEach(b => b.onclick = () => { batches[+b.dataset.bi].students.forEach(s => { s.status = b.dataset.all; }); draw(); });
+      list.querySelectorAll('[data-all]').forEach(b => b.onclick = () => { const bt = batches[+b.dataset.bi]; [...bt.students, ...bt.coaches].forEach(s => { s.status = b.dataset.all; }); draw(); });
       list.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { const bt = batches[+b.dataset.bi], s = bt.students[+b.dataset.si]; if (s.saved) (bt.removed ||= []).push(s.student_id); bt.students.splice(+b.dataset.si, 1); draw(); });
+      list.querySelectorAll('[data-crm]').forEach(b => b.onclick = () => { const bt = batches[+b.dataset.bi], c = bt.coaches[+b.dataset.i]; if (c.saved) (bt.removedCoaches ||= []).push(c.coach_id); bt.coaches.splice(+b.dataset.i, 1); draw(); });
+      list.querySelectorAll('[data-cadd]').forEach(sel => sel.onchange = () => {
+        const c = staff.find(x => x.id === sel.value); if (!c) return;
+        const bt = batches[+sel.dataset.bi];
+        bt.removedCoaches = (bt.removedCoaches || []).filter(id => id !== c.id);
+        bt.coaches.push({ coach_id: c.id, name: c.name, status: 'present', saved: false, drop_in: true });
+        draw();
+      });
       list.querySelectorAll('[data-add]').forEach(sel => sel.onchange = () => {
         const p = people.find(x => x.id === sel.value); if (!p) return;
         const bt = batches[+sel.dataset.bi];
@@ -60,13 +74,14 @@
     };
     draw();
     return {
-      payload: () => batches.map(b => ({ batch_id: b.id, records: b.students.filter(s => STAT.includes(s.status)).map(s => ({ student_id: s.student_id, status: s.status })), remove: b.removed || [] }))
+      payload: () => batches.map(b => ({ batch_id: b.id, records: b.students.filter(s => STAT.includes(s.status)).map(s => ({ student_id: s.student_id, status: s.status })), remove: b.removed || [], coaches: b.coaches.filter(c => STAT.includes(c.status)).map(c => ({ coach_id: c.coach_id, status: c.status })), remove_coaches: b.removedCoaches || [] }))
     };
   }
 
   /* ---------- the Attendance page ---------- */
   PAGES.attendance = async () => {
-    const [batches, centers, students] = await Promise.all([api('batches'), api('centers'), api('students')]);
+    const [batches, centers, students, coachList] = await Promise.all([api('batches'), api('centers'), api('students'), api('coaches')]);
+    const staff = coachList.filter(c => c.active !== 0).sort((a, b) => a.name.localeCompare(b.name));
     const people = students.filter(s => s.active !== 0);
     const S = state.att ||= { mode: 'center', center: (() => { try { const c = localStorage.getItem('mfu-att-center'); if (c && centers.some(x => x.id === c)) return c; } catch { /* ignore */ } return batches.find(b => b.center_id)?.center_id || centers[0]?.id || ''; })(), batch: '', date: todayStr(), month: todayStr().slice(0, 7), rcenter: '', sort: 'name', q: '' };
     $('#content').innerHTML = hero('Attendance', 'Take attendance for a whole center or one batch, add drop-ins, and see who has been showing up.') +
@@ -92,23 +107,23 @@
             $$('#aroster [data-open-batch]').forEach(btn => btn.onclick = () => openBatch(centerBatches[+btn.dataset.openBatch]));
           } else {
             const b = batches.find(x => x.id === key);
-            const students = await api('attendance?batch_id=' + encodeURIComponent(key) + '&date=' + S.date);
-            openBatch({ ...b, students });
+            const r = await api('attendance?batch_id=' + encodeURIComponent(key) + '&date=' + S.date);
+            openBatch({ ...b, ...r });
           }
         } catch (e) { $('#aroster').innerHTML = `<p class="error">${esc(e.message)}</p>`; }
       };
       const openBatch = b => {
         const host = isC ? $('#batch-roster') : $('#aroster');
-        const ed = rosterEditor(host, [{ ...b, removed: [] }], people, centers);
+        const ed = rosterEditor(host, [{ ...b, removed: [] }], people, centers, staff);
         const bar = document.createElement('div'); bar.className = 'att-save';
-        bar.innerHTML = '<span class="muted">Only marked students will be submitted.</span><button type="button" class="btn">Submit attendance</button>';
+        bar.innerHTML = '<span class="muted">Only marked students and coaches are submitted.</span><button type="button" class="btn">Submit attendance</button>';
         host.append(bar);
         bar.querySelector('button').onclick = async () => {
           const btn = bar.querySelector('button'); btn.disabled = true;
           try {
             const payload = ed.payload()[0];
-            const r = await api('attendance', { method: 'POST', body: JSON.stringify({ batch_id: b.id, date: S.date, records: payload.records, remove: payload.remove }) });
-            toast('Attendance submitted for ' + r.saved + ' marked students');
+            const r = await api('attendance', { method: 'POST', body: JSON.stringify({ batch_id: b.id, date: S.date, records: payload.records, remove: payload.remove, coaches: payload.coaches, remove_coaches: payload.remove_coaches }) });
+            toast('Attendance submitted for ' + r.saved + ' student' + (r.saved === 1 ? '' : 's') + ' and ' + r.coaches + ' coach' + (r.coaches === 1 ? '' : 'es'));
             await load();
           } catch (e) { toast(e.message); } finally { btn.disabled = false; }
         };
