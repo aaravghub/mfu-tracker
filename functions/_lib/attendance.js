@@ -40,7 +40,7 @@ const byName = (a, b) => (a.last_name + a.first_name).localeCompare(b.last_name 
 
 export async function handleAttendance(path, method, request, env, url, body) {
   const [root] = path.split('/');
-  if (!['attendance', 'attendance-center', 'attendance-student', 'attendance-report'].includes(root)) return null;
+  if (!['attendance', 'attendance-center', 'attendance-student', 'attendance-report', 'attendance-coaches'].includes(root)) return null;
   const q = k => url.searchParams.get(k);
 
   // ---- one batch, one date ----
@@ -63,6 +63,13 @@ export async function handleAttendance(path, method, request, env, url, body) {
       if (st.length) await env.DB.batch(st);
       return json({ ok: true, saved: body.records.length, coaches: (body.coaches || []).length });
     } catch (e) { return json({ error: String(e.message || 'Could not save attendance.') }, 400); }
+  }
+
+  // ---- every coach's marks for one month, for the Coaches page ----
+  if (root === 'attendance-coaches' && method === 'GET') {
+    const m = q('month');
+    if (!MONTH_RE.test(m || '')) return json({ error: 'A month (YYYY-MM) is required' }, 400);
+    return json((await env.DB.prepare("SELECT ca.coach_id,ca.attendance_date AS date,ca.status,b.name AS batch,NOT EXISTS(SELECT 1 FROM batch_coaches x WHERE x.batch_id=ca.batch_id AND x.coach_id=ca.coach_id) AS drop_in FROM coach_attendance ca LEFT JOIN batches b ON b.id=ca.batch_id WHERE ca.attendance_date>=? AND ca.attendance_date<? ORDER BY ca.attendance_date").bind(m + '-01', nextMonth(m) + '-01').all()).results);
   }
 
   // ---- a whole center, one date: every batch at the center with its roster and drop-ins ----

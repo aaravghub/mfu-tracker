@@ -665,7 +665,22 @@
     const canEdit = !isCoach();
     const mine = id => links.filter(l => l.coach_id === id).map(l => l.center_id);
     $('#content').innerHTML = hero('Coaches', 'Coaches can work at more than one center. Tick every center they coach at.', canEdit ? '<button class="btn secondary" data-go="centers">Manage centers</button><button class="btn" id="add-coach">+ Add coach</button>' : '') +
-      `<div class="toolbar"><input id="cofilter" placeholder="Search coaches..."><select id="cocenter" style="max-width:220px"><option value="">All centers</option>${centers.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></div><div id="corows"></div>`;
+      `<div class="toolbar"><input id="cofilter" placeholder="Search coaches..."><select id="cocenter" style="max-width:220px"><option value="">All centers</option>${centers.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></div><div id="corows"></div><section class="card section-gap" id="coatt"></section>`;
+    // Each coach's classes for a month, from attendance taken in their batches (drop-ins included).
+    let attMonth = todayStr().slice(0, 7);
+    const loadAtt = async () => {
+      const host = $('#coatt'), [y, mo] = attMonth.split('-').map(Number);
+      const label = new Date(y, mo - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      host.innerHTML = `<div class="att-head"><div><h3>Attendance</h3><small class="muted">Marked with each batch's attendance.</small></div><div class="month-nav"><button type="button" class="btn secondary small" data-cm="-1" aria-label="Previous month">‹</button><b>${esc(label)}</b><button type="button" class="btn secondary small" data-cm="1" aria-label="Next month">›</button></div></div><p class="muted">Loading…</p>`;
+      host.querySelectorAll('[data-cm]').forEach(b => b.onclick = () => { const d = new Date(y, mo - 1 + Number(b.dataset.cm), 1); attMonth = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); loadAtt(); });
+      const rows = await api('attendance-coaches?month=' + attMonth).catch(e => { host.lastElementChild.textContent = e.message; return null; }); if (!rows) return;
+      const people = coaches.filter(c => c.active !== 0 || rows.some(r => r.coach_id === c.id));
+      host.lastElementChild.outerHTML = people.length ? people.map(c => {
+        const mine = rows.filter(r => r.coach_id === c.id), came = mine.filter(r => r.status === 'present' || r.status === 'late').length;
+        return `<details class="skills-acc"><summary><b>${esc(c.name)}</b> <span class="muted">${mine.length ? `${came} of ${mine.length} classes · ${Math.round(came / mine.length * 100)}%` : 'no classes marked'}</span>${mine.some(r => r.drop_in) ? ` <span class="chip drop">${mine.filter(r => r.drop_in).length} drop-in</span>` : ''}</summary>${mine.length ? `<ul class="att-list">${mine.map(r => `<li><span>${esc(fmtShort(r.date))} · ${esc(r.batch || 'Deleted batch')}${r.drop_in ? ' <span class="chip drop">Drop-in</span>' : ''}</span><span class="chip s-${esc(r.status)}">${esc(r.status)}</span></li>`).join('')}</ul>` : ''}</details>`;
+      }).join('') : empty('', 'No coaches yet', 'Add a coach first.');
+    };
+    loadAtt();
     const draw = () => {
       const q = $('#cofilter').value.toLowerCase(), cf = $('#cocenter').value;
       const rows = coaches.filter(c => (!cf || mine(c.id).includes(cf)) && [c.name, c.email, c.phone].join(' ').toLowerCase().includes(q));
