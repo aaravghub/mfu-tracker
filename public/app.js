@@ -1,6 +1,6 @@
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const state={page:'overview',skillsType:'pole',count:0,interval:null};
-function applyTheme(theme){document.documentElement.dataset.theme=theme;const b=$('#theme-toggle');if(b){b.textContent=theme==='dark'?'Light mode':'Dark mode';b.setAttribute('aria-pressed',String(theme==='dark'))}try{localStorage.setItem('mfu-theme',theme)}catch{}}
+function applyTheme(theme){document.documentElement.dataset.theme=theme;const b=$('#theme-toggle');if(b){b.innerHTML=(theme==='dark'?'Light':'Dark')+'<span class="tt-x"> mode</span>';b.setAttribute('aria-pressed',String(theme==='dark'))}try{localStorage.setItem('mfu-theme',theme)}catch{}}
 try{applyTheme(localStorage.getItem('mfu-theme')||'light')}catch{applyTheme('light')}
 $('#theme-toggle')?.addEventListener('click',()=>applyTheme(document.documentElement.dataset.theme==='dark'?'light':'dark'));
 const titles={overview:'Overview',students:'Students',batches:'Batches',coaches:'Coaches',attendance:'Attendance',skills:'Skill library',events:'Competitions & evaluations',routines:'Routines',timers:'Timers'};
