@@ -665,7 +665,22 @@
     const canEdit = !isCoach();
     const mine = id => links.filter(l => l.coach_id === id).map(l => l.center_id);
     $('#content').innerHTML = hero('Coaches', 'Coaches can work at more than one center. Tick every center they coach at.', canEdit ? '<button class="btn secondary" data-go="centers">Manage centers</button><button class="btn" id="add-coach">+ Add coach</button>' : '') +
-      `<div class="toolbar"><input id="cofilter" placeholder="Search coaches..."><select id="cocenter" style="max-width:220px"><option value="">All centers</option>${centers.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></div><div id="corows"></div>`;
+      `<div class="toolbar"><input id="cofilter" placeholder="Search coaches..."><select id="cocenter" style="max-width:220px"><option value="">All centers</option>${centers.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></div><div id="corows"></div><section class="card section-gap" id="coatt"></section>`;
+    // Each coach's classes for a month, from attendance taken in their batches (drop-ins included).
+    let attMonth = todayStr().slice(0, 7);
+    const loadAtt = async () => {
+      const host = $('#coatt'), [y, mo] = attMonth.split('-').map(Number);
+      const label = new Date(y, mo - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      host.innerHTML = `<div class="att-head"><div><h3>Attendance</h3><small class="muted">Marked with each batch's attendance.</small></div><div class="month-nav"><button type="button" class="btn secondary small" data-cm="-1" aria-label="Previous month">‹</button><b>${esc(label)}</b><button type="button" class="btn secondary small" data-cm="1" aria-label="Next month">›</button></div></div><p class="muted">Loading…</p>`;
+      host.querySelectorAll('[data-cm]').forEach(b => b.onclick = () => { const d = new Date(y, mo - 1 + Number(b.dataset.cm), 1); attMonth = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); loadAtt(); });
+      const rows = await api('attendance-coaches?month=' + attMonth).catch(e => { host.lastElementChild.textContent = e.message; return null; }); if (!rows) return;
+      const people = coaches.filter(c => c.active !== 0 || rows.some(r => r.coach_id === c.id));
+      host.lastElementChild.outerHTML = people.length ? people.map(c => {
+        const mine = rows.filter(r => r.coach_id === c.id), came = mine.filter(r => r.status === 'present' || r.status === 'late').length;
+        return `<details class="skills-acc"><summary><b>${esc(c.name)}</b> <span class="muted">${mine.length ? `${came} of ${mine.length} classes · ${Math.round(came / mine.length * 100)}%` : 'no classes marked'}</span>${mine.some(r => r.drop_in) ? ` <span class="chip drop">${mine.filter(r => r.drop_in).length} drop-in</span>` : ''}</summary>${mine.length ? `<ul class="att-list">${mine.map(r => `<li><span>${esc(fmtShort(r.date))} · ${esc(r.batch || 'Deleted batch')}${r.drop_in ? ' <span class="chip drop">Drop-in</span>' : ''}</span><span class="chip s-${esc(r.status)}">${esc(r.status)}</span></li>`).join('')}</ul>` : ''}</details>`;
+      }).join('') : empty('', 'No coaches yet', 'Add a coach first.');
+    };
+    loadAtt();
     const draw = () => {
       const q = $('#cofilter').value.toLowerCase(), cf = $('#cocenter').value;
       const rows = coaches.filter(c => (!cf || mine(c.id).includes(cf)) && [c.name, c.email, c.phone].join(' ').toLowerCase().includes(q));
@@ -826,7 +841,7 @@
     card.className = 'timer-card counter'; card.id = 'counter';
     card.innerHTML = `<div class="timer-label">One-minute timed set</div><select id="rx" aria-label="Exercise" class="rx-select">${EXERCISES.map(([k, l]) => `<option value="${k}" ${state.rx === k ? 'selected' : ''}>${l}</option>`).join('')}</select><div class="t-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="t-track" cx="60" cy="60" r="54"/><circle class="t-prog" id="t1ring" cx="60" cy="60" r="54" pathLength="1"/></svg><div class="timer-display" id="t1">01:00</div></div><div class="count-value"><span id="count">0</span> reps</div><p class="timer-help">Tap this card (or press the space bar) every time they finish one.</p><div class="timer-actions"><button class="btn" id="start1">Start 1:00</button><button class="btn secondary" id="reset1">Reset</button></div>`;
     old.replaceWith(card);
-    $('#content').insertAdjacentHTML('beforeend', `<div class="card section-gap" id="rx-result" hidden><h3 id="rx-title"></h3><div id="rx-chart"></div><form id="dsave" class="section-gap"><h4>Save this set</h4><div class="form-grid"><label>Batch<select id="ds-batch"><option value="">All students</option>${batches.map(b => `<option value="${esc(b.id)}" ${state.rxBatch === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label><label>Student<select id="ds-student" required></select></label><label>Count<input type="number" id="ds-count" min="0" required></label><label>Date<input type="date" id="ds-date" value="${todayStr()}" required></label></div><div class="modal-actions"><button type="button" class="btn secondary" id="ds-skip">Don't save</button><button class="btn">Save set</button></div><p class="muted" id="ds-msg"></p></form></div>`);
+    $('#content').insertAdjacentHTML('beforeend', `<div class="card section-gap" id="rx-result" hidden><h3 id="rx-title"></h3><div id="rx-chart"></div><form id="dsave" class="section-gap"><h4>Save this set</h4><div class="form-grid"><label>Batch<select id="ds-batch"><option value="">All students</option>${batches.map(b => `<option value="${esc(b.id)}" ${state.rxBatch === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label><label>Find a student<input id="ds-q" type="search" placeholder="Type a name" autocomplete="off"></label><label>Student<select id="ds-student" required></select></label><label>Count<input type="number" id="ds-count" min="0" required></label><label>Date<input type="date" id="ds-date" value="${todayStr()}" required></label></div><div class="modal-actions"><button type="button" class="btn secondary" id="ds-skip">Don't save</button><button class="btn">Save set</button></div><p class="muted" id="ds-msg"></p></form></div>`);
     let taps = [], elapsed = 0, startedAt = 0, running = false, done = false, tick = null;
     const ex = () => $('#rx').value, now = () => elapsed + (running ? performance.now() - startedAt : 0);
     const paint = () => { const left = Math.min(60, Math.max(0, Math.ceil((60000 - now()) / 1000))); $('#t1').textContent = left === 60 ? '01:00' : '00:' + String(left).padStart(2, '0'); $('#t1ring').style.strokeDashoffset = Math.min(1, now() / 60000); if ($('#count').textContent !== String(taps.length)) { $('#count').textContent = taps.length; window.mfuPulse?.($('#count')); } };
@@ -849,12 +864,16 @@
     const tap = () => { if (!running) return; const t = now(); if (t < 60000) { taps.push(Math.round(t)); paint(); } };
     // pointerdown, not click: no tap delay on touch screens, so fast reps are not missed or late.
     card.onpointerdown = e => { if (!e.target.closest('button,select')) { e.preventDefault(); tap(); } };
+    const rosters = {};
     const fillStudents = async () => {
       const bid = $('#ds-batch').value; state.rxBatch = bid;
-      const ids = bid ? new Set(await api('batch-students?batch_id=' + encodeURIComponent(bid))) : null;
+      // Each batch's roster is fetched once, so typing a name sends no requests.
+      const ids = bid ? rosters[bid] ||= new Set(await api('batch-students?batch_id=' + encodeURIComponent(bid))) : null;
       const list = ids ? students.filter(s => ids.has(s.id)) : students;
-      $('#ds-student').innerHTML = '<option value="">Choose a student</option>' + list.map(s => `<option value="${esc(s.id)}">${esc(nameOf(s))}</option>`).join('');
+      const q = $('#ds-q').value.trim().toLowerCase(), shown = q ? list.filter(s => nameOf(s).toLowerCase().includes(q)) : list;
+      $('#ds-student').innerHTML = (shown.length === 1 ? '' : `<option value="">${shown.length ? 'Choose a student' : 'No match'}</option>`) + shown.map(s => `<option value="${esc(s.id)}">${esc(nameOf(s))}</option>`).join('');
     };
+    $('#ds-q').oninput = fillStudents;
     $('#ds-batch').onchange = fillStudents; fillStudents();
     const onKey = e => { if (state.page !== 'timers') return document.removeEventListener('keydown', onKey); if (e.code === 'Space' && running && !e.target.closest('input,textarea,select,button')) { e.preventDefault(); tap(); } };
     document.addEventListener('keydown', onKey);
