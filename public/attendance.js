@@ -68,7 +68,7 @@
         const bt = batches[+sel.dataset.bi];
         bt.removed = (bt.removed || []).filter(id => id !== p.id);
         bt.students.push({ student_id: p.id, first_name: p.first_name, last_name: p.last_name, status: 'present', saved: false, drop_in: true });
-        bt.students.sort((a, b) => (a.last_name + a.first_name).localeCompare(b.last_name + b.first_name));
+        bt.students.sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'en', { sensitivity: 'base' }));
         draw();
       });
     };
@@ -145,7 +145,7 @@
       const draw = () => {
         const q = S.q.toLowerCase();
         let rows = per.filter(p => !q || nameOf(p).toLowerCase().includes(q));
-        rows.sort(S.sort === 'most' ? (a, b) => b.attended - a.attended || nameOf(a).localeCompare(nameOf(b)) : S.sort === 'least' ? (a, b) => a.attended - b.attended || nameOf(a).localeCompare(nameOf(b)) : (a, b) => (a.last_name + a.first_name).localeCompare(b.last_name + b.first_name));
+        rows.sort(S.sort === 'most' ? (a, b) => b.attended - a.attended || nameOf(a).localeCompare(nameOf(b)) : S.sort === 'least' ? (a, b) => a.attended - b.attended || nameOf(a).localeCompare(nameOf(b)) : (a, b) => nameOf(a).localeCompare(nameOf(b), 'en', { sensitivity: 'base' }));
         const marked = per.reduce((n, p) => n + p.total, 0), att = per.reduce((n, p) => n + p.attended, 0), none = per.filter(p => !p.total).length;
         $('#rbody').innerHTML = `<div class="stat-row"><div class="stat card"><small>Classes attended</small><b>${att}</b></div><div class="stat card"><small>Overall attendance</small><b>${marked ? Math.round(att / marked * 100) + '%' : '—'}</b></div><div class="stat card"><small>No classes marked</small><b>${none}</b></div></div>` +
           (rows.length ? `<div class="table-wrap"><table class="att-table"><thead><tr><th>Student</th><th>Center</th><th>Attended</th><th>Absent</th><th>Rate</th><th>Batches this month</th><th></th></tr></thead><tbody>${rows.map(p => `<tr><td><b>${esc(nameOf(p))}</b></td><td>${esc(centerName(centers, p.center_id))}</td><td><b>${p.attended}</b>${p.late ? `<small class="muted"> (${p.late} late)</small>` : ''}</td><td>${p.absent}${p.excused ? `<small class="muted"> +${p.excused} excused</small>` : ''}</td><td>${p.total ? Math.round(p.attended / p.total * 100) + '%' : '—'}</td><td class="bchips">${[...p.batches.values()].map(b => `<span class="chip ${b.drop ? 'drop' : ''}" title="${b.drop ? 'Drop-in: not on this batch’s roster' : ''}">${esc(b.name)} ×${b.attended}${b.drop ? ' · drop-in' : ''}</span>`).join('') || '<span class="muted">—</span>'}</td><td><button type="button" class="btn secondary small" data-sid="${esc(p.id)}">Details</button></td></tr>`).join('')}</tbody></table></div>` : empty('📋', 'No students found', 'Try a different center or search.')) +
