@@ -10,20 +10,27 @@
     const [students, skills] = await Promise.all([api('students'), api('skills?include=general')]);
     const S = new Map(students.map(s => [s.id, s])), K = new Map(skills.map(s => [s.id, s]));
     const metrics = window.mfuMetrics(), metricName = k => metrics.find(m => m[0] === k)?.[1] || k;
-    const A = state.asst ||= { text: '', lang: 'en-IN' };
+    const A = state.asst ||= { text: '', lang: 'en-IN', mode: 'notes', batch: '', date: todayStr() };
+    const att = A.mode === 'attendance';
+    const batches = att ? (await api('batches')).filter(b => b.active !== 0) : [];
+    if (att && !batches.some(b => b.id === A.batch)) A.batch = batches[0]?.id || '';
     $('#content').innerHTML = hero('Coach assistant', 'Talk, type or paste what happened in class. Pause whenever you like. You check everything before it saves.') +
-      `<section class="card">
+      `<div class="seg" id="amode"><button type="button" data-mode="notes" class="${att ? '' : 'active'}">Class notes</button><button type="button" data-mode="attendance" class="${att ? 'active' : ''}">Attendance</button></div>
+      <section class="card">
+        ${att ? `<div class="att-bar asst-att"><label>Batch<select id="abatch">${batches.map(b => `<option value="${esc(b.id)}" ${b.id === A.batch ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label><label>Date<input type="date" id="adate" value="${esc(A.date)}"></label></div>` : ''}
         <div class="asst-bar">
           ${SR ? `<button type="button" class="btn" id="mic">Start talking</button><span class="asst-live" id="live" hidden><i></i>Listening</span>
           <label class="asst-lang">Accent<select id="lang"><option value="en-IN">English (India)</option><option value="en-US">English (US)</option></select></label>` : '<p class="muted">Voice input needs Chrome, Edge or Safari. You can still type or paste.</p>'}
         </div>
-        <textarea id="atext" rows="9" placeholder="e.g. Riya did 32 dasrang and is working on ulti bagli tedhi. Dev completed pole level 2 dive. Anika needs to work on her grip.">${esc(A.text)}</textarea>
+        <textarea id="atext" rows="9" placeholder="${att ? 'e.g. Everyone is here except Riya and Dev. Anika came late. Kabir is sick. Coach Meena was here.' : 'e.g. Riya did 32 dasrang and is working on ulti bagli tedhi. Dev completed pole level 2 dive. Anika needs to work on her grip.'}">${esc(A.text)}</textarea>
         <p class="muted asst-interim" id="interim"></p>
         <div class="modal-actions"><button type="button" class="btn secondary" id="aclear">Clear</button><button type="button" class="btn" id="areview">Review changes</button></div>
       </section><div id="aresult"></div>`;
     const box = $('#atext');
     box.oninput = () => { A.text = box.value; };
     $('#aclear').onclick = () => { box.value = A.text = ''; $('#aresult').innerHTML = ''; };
+    $$('#amode button').forEach(b => b.onclick = () => { if (b.dataset.mode !== A.mode) { A.mode = b.dataset.mode; A.text = ''; show('assistant'); } });
+    if (att) { $('#abatch').onchange = e => { A.batch = e.target.value; }; $('#adate').onchange = e => { A.date = e.target.value; }; }
 
     /* ---- voice: Start / Pause / Resume. Browsers stop listening after a silence, so it restarts until paused. ---- */
     if (SR) {
@@ -54,6 +61,12 @@
       const text = box.value.trim(); if (!text) return toast('Say or type something first');
       $('#mic') && $('#mic').textContent === 'Pause' && $('#mic').click();
       const btn = $('#areview'); btn.disabled = true; $('#aresult').innerHTML = '<section class="card section-gap"><p class="muted">Reading it and double-checking…</p></section>';
+      if (att) {
+        try { await reviewAttendance(await api('assistant', { method: 'POST', body: JSON.stringify({ mode: 'attendance', text, batch_id: A.batch }) })); }
+        catch (e) { $('#aresult').innerHTML = `<section class="card section-gap"><p class="error">${esc(e.message)}</p><p class="muted">You can still take attendance on the Attendance page.</p></section>`; }
+        finally { btn.disabled = false; }
+        return;
+      }
       let r;
       try { r = await api('assistant', { method: 'POST', body: JSON.stringify({ text, metrics }) }); }
       catch (e) {
@@ -79,6 +92,38 @@
         ${acts.length ? '<div class="modal-actions"><button type="button" class="btn" id="asave">Save checked changes</button></div>' : ''}</section>`;
       $$('#aresult [data-k]').forEach(el => el.onchange = () => { const a = acts[+el.dataset.i]; a[el.dataset.k] = el.dataset.k === 'value' ? Number(el.value) : el.value; });
       $('#asave') && ($('#asave').onclick = () => save(acts.filter((_, i) => $(`[data-pick="${i}"]`).checked)));
+    };
+
+    /* ---- attendance review: the whole roster with the AI's marks filled in; drop-ins added ---- */
+    const reviewAttendance = async r => {
+      const [now, staff] = await Promise.all([api('attendance?batch_id=' + encodeURIComponent(A.batch) + '&date=' + A.date), api('coaches')]);
+      const mark = (kind, id) => r.marks.find(m => m.kind === kind && m.id === id);
+      // A doubted mark is not applied: the row keeps what was saved before and shows the AI's guess.
+      const row = (kind, id, nm, saved, drop) => { const m = mark(kind, id), guess = m && !m.doubt ? m.status : r.rest && !drop && !m ? r.rest : saved || ''; return { kind, id, name: nm, status: guess, drop, heard: m?.heard || '', doubt: m?.doubt ? `${m.doubt} (AI said ${m.status})` : '', changed: guess !== (saved || '') }; };
+      const rows = [
+        ...now.students.map(s => row('student', s.student_id, s.first_name + ' ' + s.last_name, s.status, s.drop_in)),
+        ...r.marks.filter(m => m.kind === 'student' && !now.students.some(s => s.student_id === m.id)).map(m => row('student', m.id, nameOf(S.get(m.id) || {}), '', true)),
+        ...now.coaches.map(c => row('coach', c.coach_id, c.name, c.status, c.drop_in)),
+        ...r.marks.filter(m => m.kind === 'coach' && !now.coaches.some(c => c.coach_id === m.id)).map(m => row('coach', m.id, staff.find(c => c.id === m.id)?.name || 'Coach', '', true))
+      ];
+      const STAT = ['present', 'late', 'absent', 'excused'];
+      const one = (x, i) => `<div class="asst-row ${x.doubt ? 'doubt' : x.changed ? 'changed' : ''}"><div><b>${esc(x.name)}</b>${x.kind === 'coach' ? ' <span class="chip">Coach</span>' : ''}${x.drop ? ' <span class="chip drop">Drop-in</span>' : ''}${x.heard ? `<small>“${esc(x.heard)}”</small>` : ''}${x.doubt ? `<small class="asst-doubt">Double-check: ${esc(x.doubt)}</small>` : ''}</div><div class="att-marks">${STAT.map(k => `<button type="button" class="att-mark m-${k}" aria-checked="${k === x.status}" data-r="${i}" data-s="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div></div>`;
+      const paint = () => {
+        $('#aresult').innerHTML = `<section class="card section-gap"><h3>Check attendance</h3><small class="muted">${esc(fmtShort(A.date))}${r.rest ? ' · everyone not named: ' + r.rest : ''} · tap to fix anything, then save.${r.model ? ' · ' + esc(r.model.split('/').slice(1).join('/')) : ''}</small>
+          <div class="asst-list section-gap-sm">${rows.map(one).join('')}</div>
+          ${r.unclear?.length ? `<div class="notice warn-n section-gap-sm"><b>Not sure about</b><ul>${r.unclear.map(u => `<li>${esc(u)}</li>`).join('')}</ul></div>` : ''}
+          <div class="modal-actions"><span class="muted">${rows.filter(x => x.status).length} of ${rows.length} marked</span><button type="button" class="btn" id="asave">Save attendance</button></div></section>`;
+        $$('#aresult [data-r]').forEach(b => b.onclick = () => { rows[+b.dataset.r].status = b.dataset.s; paint(); });
+        $('#asave').onclick = async () => {
+          const pick = k => rows.filter(x => x.kind === k && x.status);
+          try {
+            const res = await api('attendance', { method: 'POST', body: JSON.stringify({ batch_id: A.batch, date: A.date, records: pick('student').map(x => ({ student_id: x.id, status: x.status })), coaches: pick('coach').map(x => ({ coach_id: x.id, status: x.status })) }) });
+            toast(`Saved ${res.saved} student${res.saved === 1 ? '' : 's'} and ${res.coaches} coach${res.coaches === 1 ? '' : 'es'}`);
+            A.text = ''; box.value = ''; $('#aresult').innerHTML = '<section class="card section-gap"><p class="chip ok">Attendance saved</p></section>';
+          } catch (e) { toast(e.message); }
+        };
+      };
+      paint();
     };
 
     const save = async chosen => {

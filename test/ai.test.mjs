@@ -21,3 +21,18 @@ test('reads JSON wrapped in prose or code fences', () => {
   assert.deepEqual(extractJson('Sure!\n```json\n{"actions":[]}\n```'), { actions: [] });
   assert.equal(extractJson('no json here'), null);
 });
+
+import { validateAttendance } from '../functions/_lib/ai.js';
+test('attendance keeps real people and statuses, once each', () => {
+  const r = validateAttendance({ rest: 'present', marks: [
+    { kind: 'student', id: 's1', status: 'absent', heard: 'Riya not here' },
+    { kind: 'student', id: 's1', status: 'late' },
+    { kind: 'coach', id: 'c1', status: 'present' },
+    { kind: 'student', id: 'nobody', status: 'present', heard: 'Zed' },
+    { kind: 'student', id: 's2', status: 'asleep' }
+  ] }, { students: [{ id: 's1' }, { id: 's2' }], coaches: [{ id: 'c1' }] });
+  assert.equal(r.rest, 'present');
+  assert.deepEqual(r.marks.map(m => m.kind + m.id + m.status), ['students1absent', 'coachc1present']);
+  assert.equal(r.unclear.length, 2);
+  assert.equal(validateAttendance({ rest: 'maybe' }, { students: [], coaches: [] }).rest, null);
+});

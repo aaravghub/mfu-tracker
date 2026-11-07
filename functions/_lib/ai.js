@@ -73,6 +73,24 @@ export function validate(raw, { students, skills, metrics }) {
   return { actions, unclear };
 }
 
+// Attendance: a status for everyone not mentioned ("rest") plus each person named. Only real students and coaches survive.
+const ATT = new Set(['present', 'late', 'absent', 'excused']);
+export function validateAttendance(raw, { students, coaches }) {
+  const ids = { student: new Set(students.map(s => s.id)), coach: new Set(coaches.map(c => c.id)) };
+  const unclear = (Array.isArray(raw?.unclear) ? raw.unclear : []).map(String).slice(0, 20), marks = [], seen = new Set();
+  for (const m of Array.isArray(raw?.marks) ? raw.marks.slice(0, 300) : []) {
+    const heard = String(m?.heard || '').slice(0, 300), kind = m?.kind === 'coach' ? 'coach' : 'student';
+    if (!ids[kind].has(m?.id) || !ATT.has(m?.status)) { unclear.push(`Couldn't use “${heard || 'an item'}”: no ${kind} or status matched.`); continue; }
+    if (seen.has(kind + m.id)) continue;
+    seen.add(kind + m.id); marks.push({ kind, id: m.id, status: m.status, heard });
+  }
+  return { rest: ATT.has(raw?.rest) ? raw.rest : null, marks, unclear };
+}
+
+const ATT_PROMPT = `You take Mallakhamb class attendance from a coach's spoken or typed words. Names are often misheard by speech recognition; match them to the closest person in the lists by sound and spelling. Never invent people.
+Return only JSON: {"rest":"present"|"absent"|null,"marks":[{"kind":"student"|"coach","id":"<id>","status":"present"|"late"|"absent"|"excused","heard":"<the words>"}],"unclear":["..."]}
+"rest" is the status for everyone on the roster who is not named ("everyone's here except..." = present; "only X and Y came" = absent; null if the coach didn't say). Put every named person in "marks", including people not on the roster who came (drop-ins). Sick, injured or excused = excused. If a name matches several people or you are unsure, write it in "unclear" instead of guessing.`;
+
 const PROMPT = `You turn a Mallakhamb coach's spoken or typed class notes into actions. The text may come from speech recognition, so names and Mallakhamb terms are often misheard (for example "lower bagli tedhi" for "Ulti Bagli Tedhi", "das rang" for "Dasrang", "sadi adi" for "Sadhi Adhi"). Match every name and term to the closest entry in the lists below by sound and spelling. Never invent students, skills or tests.
 Return only JSON: {"actions":[...],"unclear":[...]}.
 Actions:
@@ -89,6 +107,7 @@ export async function handleAssistant(path, method, request, env) {
   const body = await request.json().catch(() => null);
   const text = String(body?.text || '').trim().slice(0, 20000);
   if (!text) return json({ error: 'Say or type something first.' }, 400);
+  if (body.mode === 'attendance') return attendanceFromWords(env, text, body);
   const metrics = (Array.isArray(body.metrics) ? body.metrics : []).filter(m => Array.isArray(m) && /^[a-z0-9_]{1,40}$/.test(m[0])).slice(0, 60);
   const [students, skills] = (await env.DB.batch([
     env.DB.prepare('SELECT id,first_name,last_name FROM students WHERE COALESCE(active,1)=1'),
@@ -106,6 +125,28 @@ export async function handleAssistant(path, method, request, env) {
   const check = result.actions.length ? await askFree(env, [{ role: 'system', content: CHECK }, { role: 'user', content: `Coach said:\n${text}\n\nProposed actions:\n${listed}` }], first.model) : { data: null };
   const flags = new Map((Array.isArray(check.data?.wrong) ? check.data.wrong : []).filter(w => Number.isInteger(w?.index)).map(w => [w.index, String(w.why || '').slice(0, 200)]));
   result.actions.forEach((a, i) => { if (flags.has(i)) a.doubt = flags.get(i) || 'The double-check was not sure about this one.'; });
+  for (const m of (Array.isArray(check.data?.missing) ? check.data.missing : []).slice(0, 10)) result.unclear.push('Possibly missed: ' + String(m).slice(0, 200));
+  return json({ ...result, model: first.model, checked_by: check.model || null });
+}
+
+async function attendanceFromWords(env, text, body) {
+  if (!body.batch_id) return json({ error: 'Choose a batch first.' }, 400);
+  const [roster, crew, students, coaches] = (await env.DB.batch([
+    env.DB.prepare('SELECT student_id AS id FROM batch_students WHERE batch_id=?').bind(body.batch_id),
+    env.DB.prepare('SELECT coach_id AS id FROM batch_coaches WHERE batch_id=?').bind(body.batch_id),
+    env.DB.prepare('SELECT id,first_name,last_name FROM students WHERE COALESCE(active,1)=1'),
+    env.DB.prepare('SELECT id,name FROM coaches WHERE COALESCE(active,1)=1')
+  ])).map(r => r.results);
+  const onRoster = new Set(roster.map(r => r.id)), onCrew = new Set(crew.map(r => r.id));
+  const name = s => s.first_name + ' ' + (s.last_name || '');
+  const lists = `Roster students (id|name):\n${students.filter(s => onRoster.has(s.id)).map(s => s.id + '|' + name(s)).join('\n')}\n\nBatch coaches (id|name):\n${coaches.filter(c => onCrew.has(c.id)).map(c => c.id + '|' + c.name).join('\n')}\n\nOther students who may drop in (id|name):\n${students.filter(s => !onRoster.has(s.id)).map(s => s.id + '|' + name(s)).join('\n')}\n\nOther coaches (id|name):\n${coaches.filter(c => !onCrew.has(c.id)).map(c => c.id + '|' + c.name).join('\n')}`;
+  const first = await askFree(env, [{ role: 'system', content: ATT_PROMPT + '\n\n' + lists }, { role: 'user', content: text }]);
+  if (!first.data) return json({ error: 'Every free AI model is busy or out of free use right now. Try again in a minute.', tried: first.tried }, 503);
+  const result = validateAttendance(first.data, { students, coaches });
+  const who = new Map([...students.map(s => ['student' + s.id, name(s)]), ...coaches.map(c => ['coach' + c.id, c.name])]);
+  const listed = [result.rest ? `everyone else on the roster: ${result.rest}` : null, ...result.marks.map((m, i) => `${i}: ${who.get(m.kind + m.id)} ${m.status}`)].filter(Boolean).join('\n');
+  const check = result.marks.length ? await askFree(env, [{ role: 'system', content: CHECK }, { role: 'user', content: `Coach said:\n${text}\n\nProposed attendance:\n${listed}` }], first.model) : { data: null };
+  for (const w of Array.isArray(check.data?.wrong) ? check.data.wrong : []) if (result.marks[w?.index]) result.marks[w.index].doubt = String(w.why || 'The double-check was not sure about this one.').slice(0, 200);
   for (const m of (Array.isArray(check.data?.missing) ? check.data.missing : []).slice(0, 10)) result.unclear.push('Possibly missed: ' + String(m).slice(0, 200));
   return json({ ...result, model: first.model, checked_by: check.model || null });
 }

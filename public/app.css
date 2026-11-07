@@ -808,3 +808,9 @@ main>header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;heigh
 .asst-doubt{color:var(--orange-ink)!important}
 .notice ul{margin:6px 0 0;padding-left:18px}
 @media (prefers-reduced-motion:no-preference){.asst-live i{animation:m-pulse 1.2s ease-in-out infinite}}
+.asst-att{padding:0;border:0;margin-bottom:12px}
+.asst-row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-ctl)}
+.asst-row small{display:block;color:var(--muted)}
+.asst-row.changed{border-left:3px solid var(--orange)}
+.asst-row.doubt{border-color:var(--orange)}
+@media (max-width:700px){.asst-row .att-marks{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));width:100%}}
