@@ -1,3 +1,4 @@
+import { deletePhoto } from './photos.js';
 import { json, cleanEmail, isEmail, isHttpUrl, esc } from './util.js';
 import { mailConfigured, sendMessages, siteUrl, wrap } from './mail.js';
 import { createMeetEvent, deleteCalendarEvent, writeSpreadsheet, shareFile } from './google.js';
@@ -433,13 +434,13 @@ export async function handleFeatures(path, method, request, env, url, actor) {
   if (root === 'student-photos') {
     if (method === 'GET') return json(await all(env, 'SELECT * FROM student_photos WHERE student_id=? ORDER BY COALESCE(taken_date,created_at) DESC', q('student_id') || ''));
     if (method === 'POST') {
-      if (!body?.student_id || !isHttpUrl(body.url)) return json({ error: 'Add a photo link that starts with https://' }, 400);
+      if (!body?.student_id || !isHttpUrl(body.url)) return json({ error: 'Add a video link that starts with https://' }, 400);
       if (body.taken_date && !validDate(body.taken_date)) return json({ error: 'Dates must look like 2026-10-29.' }, 400);
       const pid = crypto.randomUUID();
       await env.DB.prepare('INSERT INTO student_photos(id,student_id,url,caption,taken_date,added_by) SELECT ?,id,?,?,?,? FROM students WHERE id=?').bind(pid, body.url, str(body.caption, 300), body.taken_date || null, by, body.student_id).run();
       return json({ ok: true, id: pid }, 201);
     }
-    if (method === 'DELETE' && id) { await env.DB.prepare('DELETE FROM student_photos WHERE id=?').bind(id).run(); return json({ ok: true }); }
+    if (method === 'DELETE' && id) { const p = await env.DB.prepare('SELECT url FROM student_photos WHERE id=?').bind(id).first(); await env.DB.prepare('DELETE FROM student_photos WHERE id=?').bind(id).run(); await deletePhoto(env, p?.url); return json({ ok: true }); }
   }
 
   // ---- coach notes: what they did this batch and what's next ----

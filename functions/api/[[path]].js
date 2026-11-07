@@ -70,9 +70,12 @@ export async function onRequest({request,env,params}){
  const s=await session(request,env);if(!s||(s.role!=='admin'&&s.role!=='coach'))return json({error:'Please sign in as an administrator or coach.'},401);
  let actor={role:'admin',name:'Admin'};
  if(s.role==='coach'){const c=s.coach_id?await env.DB.prepare('SELECT id,name,email FROM coaches WHERE id=? AND COALESCE(active,1)=1 AND password_hash IS NOT NULL').bind(s.coach_id).first():null;if(!c)return json({error:'Please sign in again.'},401);if(adminOnly(path,method))return json({error:'Only the admin can manage coach and parent accounts.'},403);actor={role:'coach',id:c.id,name:c.name,email:c.email}}
+ // A button that just emailed more than 20 people waits 10 minutes before it runs again, unless the person
+ // confirms (x-bypass-cooldown). Checked before the button does anything, so nothing is half-done. Evaluations are exempt.
+ if((method==='POST'||method==='PUT')&&!path.startsWith('evaluations')){const last=Number((await env.DB.prepare('SELECT v FROM schema_meta WHERE k=?').bind('mailcd:'+path).first())?.v||0),wait=last+600-Math.floor(Date.now()/1000);if(wait>0&&request.headers.get('x-bypass-cooldown')!=='1')return json({error:'This button emailed more than 20 people less than 10 minutes ago.',cooldown:true,wait},429);env={...env,MAIL_GUARD:path}}
  if(path==='coach-accounts'||path.startsWith('coach-accounts/'))return handleCoachAccounts(path,method,request,env);
  if(path==='signups'||path.startsWith('signups/'))return handleSignupReview(path,method,request,env,actor);
- if(path==='photo'&&method==='POST')return savePhoto(env,url.searchParams.get('kind'),url.searchParams.get('id'),request);
+ if(path==='photo'&&method==='POST')return savePhoto(env,url.searchParams.get('kind'),url.searchParams.get('id'),request,actor.name);
  if(path==='metric-photos'&&method==='GET')return json((await env.DB.prepare('SELECT metric,image_url FROM metric_photos').all()).results);
  { const bi=await handleInsights(path,method,env,url);if(bi)return bi }
  { const ai=await handleAssistant(path,method,request,env);if(ai)return ai }

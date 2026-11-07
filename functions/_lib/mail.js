@@ -51,6 +51,8 @@ export async function sendMessages(env, messages, { cc = true } = {}) {
   let sent = 0, failed = 0, error = '';
   const ccTo = cc && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ccAddress(env)) ? ccAddress(env) : '', single = messages.length === 1;
   if (!mailConfigured(env)) return { sent: 0, failed: messages.length, error: 'Gmail is not configured. Add the Google OAuth secrets in Cloudflare Pages.' };
+  // A send to more than 20 people starts this button's 10-minute cooldown (see the API router).
+  if (messages.length > 20 && env.MAIL_GUARD) await env.DB.prepare("INSERT INTO schema_meta(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v").bind('mailcd:' + env.MAIL_GUARD, String(Math.floor(Date.now() / 1000))).run();
   let token;
   try { token = await googleAccessToken(env); }
   catch (e) { return { sent: 0, failed: messages.length, error: String(e.message || 'Gmail authorization failed.') }; }
