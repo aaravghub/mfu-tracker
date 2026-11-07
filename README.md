@@ -19,6 +19,15 @@ Database changes apply automatically on the first request after deploy — nothi
 - **General skills**: in the Skill library, tick *General skill* for skills you want to track that are not part of a level. They show on each student's skill progress but never count toward a level or an evaluation.
 - **Database reads**: indexes on attendance, timed sets, fitness and rosters mean pages read only the rows they need. Schema checks run once per schema version instead of on every cold start.
 
+## Coach assistant (free AI)
+Coaches talk (Start, Pause, Resume), type or paste class notes on *Coach assistant*. A free AI model turns them into skill updates, counts (dasrang, climbs, push-ups, holds…) and notes, a second free model double-checks them, and the coach ticks what is right before anything saves. Misheard Mallakhamb words ("lower bagli tedhi") are matched against the real skill and student lists.
+
+It only uses free models: every OpenRouter model priced at $0 (the list refreshes hourly), switching to the next one when a model is rate-limited or down. Set up once:
+1. Make a free account at openrouter.ai and create an API key (no card needed).
+2. In Cloudflare Pages → Settings → Environment variables, add it as the secret `OPENROUTER_API_KEY`, then redeploy.
+
+Optional extra free capacity: `GROQ_API_KEY` (console.groq.com) and `GEMINI_API_KEY` (aistudio.google.com) are used too when present. With no key, the page falls back to keyword matching for skills.
+
 ## Coaches, evaluations, meetings and more
 - **Coach accounts**: on *Coach accounts*, click *Create account & invite* for any coach with an email. Coaches sign in on the **Coach** tab and can do everything the admin can except manage coach and parent accounts. Their *My dashboard* shows their batches, students, assigned evaluations, meetings and parent requests.
 - **Calendar & meetings**: a month view of evaluations, competitions, demos and meetings. *New meeting* can create a Google Meet link and Google Calendar invite and email it to coaches, parents (or whole batches) and any other addresses.

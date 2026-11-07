@@ -788,3 +788,23 @@ main>header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;heigh
   .tracker span:nth-child(n+4){animation-delay:.05s}.tracker span:nth-child(n+7){animation-delay:.1s}.tracker span:nth-child(n+10){animation-delay:.15s}
   .meter i.on{animation:m-fill .35s ease both;transform-origin:bottom}
 }
+
+/* ---------- coach assistant ---------- */
+.asst-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.asst-live{display:inline-flex;align-items:center;gap:8px;color:var(--bad);font-weight:500}
+.asst-live i{width:10px;height:10px;border-radius:50%;background:var(--bad)}
+.asst-lang{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:13px;color:var(--muted)}
+.asst-lang select{width:auto}
+#atext{min-height:180px;font-size:16px;line-height:1.55}
+.asst-interim{min-height:20px;margin:6px 0 0;font-style:italic}
+.asst-list{display:grid;gap:6px}
+.asst-item{align-items:flex-start}
+.asst-item>span{gap:4px}
+.pick .asst-what{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.asst-what select{width:auto;min-height:32px}
+.asst-what input:not([type=checkbox]){width:auto;min-height:32px}
+.asst-num{max-width:90px}
+.asst-item.doubt{border-color:var(--orange)}
+.asst-doubt{color:var(--orange-ink)!important}
+.notice ul{margin:6px 0 0;padding-left:18px}
+@media (prefers-reduced-motion:no-preference){.asst-live i{animation:m-pulse 1.2s ease-in-out infinite}}

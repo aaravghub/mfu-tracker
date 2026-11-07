@@ -43,12 +43,12 @@
   const MANAGE = [['overview', 'Overview'], ['students', 'Students'], ['batches', 'Batches'], ['batch_progress', 'Batch progress'], ['coaches', 'Coaches'], ['centers', 'Centers'], ['attendance', 'Attendance'], ['fitness', 'Fitness'], ['exercises', 'Exercises & sets'], ['skills', 'Skill library'], ['routines', 'Routines']];
   NAV.admin = [['Manage', MANAGE], EVENTS_NAV,
     ['Families', [['parents', 'Parents'], ['requests', 'Parent requests'], ['announcements', 'Announcements'], ['links', 'Links & forms'], ['shop', 'Shop'], ['email', 'Email parents']]],
-    ['Tools', [['assistant', 'Skill assistant'], ['coach_accounts', 'Coach accounts'], ['timers', 'Timers']]]];
+    ['Tools', [['assistant', 'Coach assistant'], ['coach_accounts', 'Coach accounts'], ['timers', 'Timers']]]];
   NAV.coach = [['Me', [['coach_home', 'My dashboard'], ['requests', 'Parent requests'], ['announcements', 'Announcements']]], ['Manage', MANAGE.filter(([p]) => p !== 'overview')], EVENTS_NAV,
     ['Families', [['links', 'Links & forms'], ['shop', 'Shop'], ['email', 'Email parents']]],
-    ['Tools', [['assistant', 'Skill assistant'], ['timers', 'Timers'], ['c_account', 'Account']]]];
+    ['Tools', [['assistant', 'Coach assistant'], ['timers', 'Timers'], ['c_account', 'Account']]]];
   NAV.parent = [['', [['home', 'My children'], ['p_skills', 'Skills'], ['p_practice', 'Home practice'], ['p_announcements', 'Announcements'], ['p_events', 'Events'], ['p_contact', 'Contact coach'], ['p_links', 'Forms & links'], ['p_shop', 'Shop'], ['account', 'Account']]]];
-  Object.assign(titles, { student: 'Student', centers: 'Centers', coach_home: 'My dashboard', calendar: 'Calendar & meetings', evaluations: 'Evaluations', competitions: 'Competition scores', demos: 'Demos', requests: 'Parent requests', announcements: 'Announcements', assistant: 'Skill assistant', coach_accounts: 'Coach accounts', fitness: 'Fitness', c_account: 'Account', p_announcements: 'Announcements', p_contact: 'Contact coach', events: 'Event list' });
+  Object.assign(titles, { student: 'Student', centers: 'Centers', coach_home: 'My dashboard', calendar: 'Calendar & meetings', evaluations: 'Evaluations', competitions: 'Competition scores', demos: 'Demos', requests: 'Parent requests', announcements: 'Announcements', assistant: 'Coach assistant', coach_accounts: 'Coach accounts', fitness: 'Fitness', c_account: 'Account', p_announcements: 'Announcements', p_contact: 'Contact coach', events: 'Event list' });
 
   /* ---------- admin overview: add requests, demos and meetings ---------- */
   const _overview = PAGES.overview;
@@ -658,6 +658,7 @@
     draw();
   };
   window.MFU_parsePlain = parsePlain;
+  window.mfuMetrics = allMetrics;
 
   /* ---------- coaches: each coach can work at several centers ---------- */
   PAGES.coaches = async () => {

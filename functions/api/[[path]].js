@@ -10,6 +10,7 @@ import { handleSignup, handleSignupReview } from '../_lib/signup.js';
 import { handleForms, handlePublicForm } from '../_lib/forms.js';
 import { GOOGLE_SCOPES } from '../_lib/google.js';
 import { handleInsights } from '../_lib/insights.js';
+import { handleAssistant } from '../_lib/ai.js';
 // Coaches can do everything the admin can except manage coach and parent accounts.
 const adminOnly = (path, method) => { const [root] = path.split('/'); return root === 'coach-accounts' || root === 'signups' || (root === 'parents' && method !== 'GET') || (root === 'coaches' && method !== 'GET'); };
 // One random code per database, made on first use.
@@ -69,6 +70,7 @@ export async function onRequest({request,env,params}){
  if(path==='coach-accounts'||path.startsWith('coach-accounts/'))return handleCoachAccounts(path,method,request,env);
  if(path==='signups'||path.startsWith('signups/'))return handleSignupReview(path,method,request,env,actor);
  { const bi=await handleInsights(path,method,env,url);if(bi)return bi }
+ { const ai=await handleAssistant(path,method,request,env);if(ai)return ai }
  { const f=await handleFeatures(path,method,request,env,url,actor);if(f)return f }
  { const pr=await handlePractice(path,method,request,env,url,actor);if(pr)return pr }
  { const fm=await handleForms(path,method,request,env,url,actor);if(fm)return fm }
