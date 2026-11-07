@@ -6,3 +6,8 @@ pages_build_output_dir = "public"
 binding = "DB"
 database_name = "mfu-tracker-db"
 database_id = "789b54d3-a0b3-42a6-832a-973ee10c2e50"
+
+# Photos for students, skills and fitness tests. Uploads are shrunk in the browser; reads are cached.
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "mfu-photos"

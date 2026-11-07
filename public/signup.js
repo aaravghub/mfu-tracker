@@ -116,6 +116,38 @@
     await _ov();
     if (state.role !== 'admin') return;
     const n = (await api('signups').catch(() => [])).filter(s => s.status === 'pending').length;
-    if (n) { $('#content .stats')?.insertAdjacentHTML('beforebegin', `<div class="notice"><div><b>${n} new sign-up${n > 1 ? 's' : ''} waiting for review</b><br><small>Approve or decline new parent and coach accounts.</small></div><button class="btn" id="go-su">Review sign-ups</button></div>`); $('#go-su').onclick = () => show('signups'); }
+    if (n) { $('#content .stats')?.insertAdjacentHTML('beforebegin', `<div class="notice"><div><b>${n} new sign-up${n >1 ? 's' : ''} waiting for review</b><br><small>Approve or decline new parent and coach accounts.</small></div><button class="btn" id="go-su">Review sign-ups</button></div>`); $('#go-su').onclick = () => show('signups'); }
+  };
+})();
+
+/* Parent first sign-in: ask for whatever the sign-up form would have asked that MFU does not have yet
+   (their phone, address and emergency contact; each child's date of birth, gender and center). Asked once per visit. */
+(() => {
+  const LABEL = { name: 'Your full name', phone: 'Phone number', address: 'Home address', emergency_name: 'Emergency contact name', emergency_phone: 'Emergency contact phone' };
+  window.mfuParentDetails = async () => {
+    try { if (sessionStorage.getItem('mfu-details-asked')) return; sessionStorage.setItem('mfu-details-asked', '1'); } catch { /* private mode: ask anyway */ }
+    const need = await api('parent/profile').catch(() => null);
+    if (!need || (!need.missing.length && !need.children.length)) return;
+    const field = k => k === 'address' ? `<label class="wide">${LABEL[k]}<textarea name="${k}" rows="2" required autocomplete="street-address"></textarea></label>`
+      : `<label>${LABEL[k]}<input name="${k}" ${k.includes('phone') ? 'type="tel"' : ''} required autocomplete="${k === 'name' ? 'name' : k === 'phone' ? 'tel' : 'off'}"></label>`;
+    const kid = c => `<fieldset data-kid="${esc(c.id)}"><legend>${esc(c.name)}</legend><div class="form-grid">
+      ${c.missing.includes('dob') ? `<label>Date of birth<input type="date" name="dob" required max="${todayStr()}"></label>` : ''}
+      ${c.missing.includes('gender') ? '<label>Gender<select name="gender" required><option value="">Choose…</option><option>Male</option><option>Female</option></select></label>' : ''}
+      ${c.missing.includes('center_id') ? `<label>Center<select name="center_id" required><option value="">Choose…</option>${need.centers.map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select></label>` : ''}</div></fieldset>`;
+    await new Promise(done => {
+      const m = openModal('A few details first', `<p class="muted">MFU is missing some details we need for class and emergencies. This takes a minute.</p><form id="pdf" class="signup-form">
+        ${need.missing.length ? `<div class="form-grid">${need.missing.map(field).join('')}</div>` : ''}${need.children.map(kid).join('')}
+        <div class="modal-actions"><button type="button" class="btn secondary" id="pdlater">Later</button><button class="btn">Save</button></div></form>`, { wide: true });
+      const finish = () => { m.close(); done(); };
+      m.$('#pdlater').onclick = finish;
+      m.$('[data-close]').addEventListener('click', done);
+      m.$('#pdf').onsubmit = async e => {
+        e.preventDefault();
+        const f = new FormData(e.target), body = Object.fromEntries(need.missing.map(k => [k, f.get(k)]));
+        body.children = [...m.root.querySelectorAll('[data-kid]')].map(fs => ({ id: fs.dataset.kid, ...Object.fromEntries([...fs.querySelectorAll('[name]')].map(i => [i.name, i.value])) }));
+        try { await api('parent/profile', { method: 'POST', body: JSON.stringify(body) }); toast('Thanks, your details are saved'); state.home = null; finish(); }
+        catch (err) { toast(err.message); }
+      };
+    });
   };
 })();

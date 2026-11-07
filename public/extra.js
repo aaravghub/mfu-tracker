@@ -5,7 +5,7 @@ window.PAGES = {};
 state.role = null;
 
 /* ---------- small helpers ---------- */
-const safeUrl = u => (/^https?:\/\//i.test(String(u || '')) ? u : '#');
+const safeUrl = u => (/^(https?:\/\/|\/api\/photo\/)/i.test(String(u || '')) ? u : '#'); // our own photos are served from /api/photo/
 const link = (u, label, cls = 'btn blue small') => `<a class="${cls}" href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
 const todayStr = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const dateObj = s => new Date(String(s) + 'T00:00:00');
@@ -367,10 +367,10 @@ function childCard(c) {
     const lvl = Number(c[app + '_level']) || 1, next = lvl + 1, st = s => s.level <= lvl ? 'mastered' : s.status;
     const at = list.filter(s => s.level === next), done = at.filter(s => st(s) === 'mastered').length;
     const levels = [1, 2, 3, 4, 5].filter(l => list.some(s => s.level === l));
-    const item = s => `<li><span>${s.video_url ? `<a href="${esc(safeUrl(s.video_url))}" target="_blank" rel="noopener noreferrer">${esc(s.name)}</a>` : esc(s.name)}</span><span class="skill-when">${st(s) === 'mastered' && s.mastered_date ? 'Completed ' + skillDate(s.mastered_date) : s.started_date && st(s) !== 'not_started' ? 'Started ' + skillDate(s.started_date) : ''}</span><span class="chip s-${st(s)}">${STATUS_LABEL[st(s)]}</span></li>`;
+    const item = s => `<li><span>${mfuSkillLink(s)}</span><span class="skill-when">${st(s) === 'mastered' && s.mastered_date ? 'Completed ' + skillDate(s.mastered_date) : s.started_date && st(s) !== 'not_started' ? 'Started ' + skillDate(s.started_date) : ''}</span><span class="chip s-${st(s)}">${STATUS_LABEL[st(s)]}</span></li>`;
     return `<details class="skills-acc"><summary><b>${app[0].toUpperCase() + app.slice(1)}</b> · Level ${lvl}${lvl >= 5 ? ' <span class="muted">— all levels passed 🎉</span>' : at.length ? ` <span class="muted">— working on Level ${next}: ${done}/${at.length} skills completed</span>` : ''}</summary>${lvl < 5 && at.length ? `<div class="bar"><i style="width:${Math.round(done / at.length * 100)}%"></i></div>` : ''}${levels.map(l => `<details ${l === next ? 'open' : ''}><summary class="lv-sum">Level ${l} <span class="muted">${l <= lvl ? '✓ passed' : list.filter(s => s.level === l && st(s) === 'mastered').length + '/' + list.filter(s => s.level === l).length}</span></summary><ul class="skill-list">${list.filter(s => s.level === l).map(item).join('')}</ul></details>`).join('')}</details>`;
   };
-  return `<section class="card child"><div class="child-head"><div class="avatar">${c.photo_url ? `<img src="${esc(safeUrl(c.photo_url))}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span>${esc((c.first_name[0] || '') + (c.last_name[0] || ''))}</span></div><div><h2>${esc(nameOf(c))}</h2><p class="muted">${esc(c.center_id ? c.center_id[0].toUpperCase() + c.center_id.slice(1) : '')}</p></div></div>
+  return `<section class="card child"><div class="child-head"><div class="avatar" role="button" tabindex="0" title="${c.photo_url ? 'Change photo' : 'Add a photo'}" data-kid-photo="${esc(c.id)}">${c.photo_url ? `<img src="${esc(safeUrl(c.photo_url))}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span>${esc((c.first_name[0] || '') + (c.last_name[0] || ''))}</span></div><div><h2>${esc(nameOf(c))}</h2><p class="muted">${esc(c.center_id ? c.center_id[0].toUpperCase() + c.center_id.slice(1) : '')}</p></div></div>
   <div class="levels">${['pole', 'rope', 'yoga'].map(k => `<div class="level-box"><small>${k.toUpperCase()}</small><b>Level ${c[k + '_level']}</b>${pips(c[k + '_level'])}</div>`).join('')}</div>
   ${c.batches.length ? `<h4>Classes</h4><div class="chips">${c.batches.map(b => `<span class="chip ${b.drop_in ? 'drop' : ''}">${esc(b.name)}${b.days ? ' · ' + esc(b.days) : ''}${b.start_time ? ' · ' + esc(fmtTime(b.start_time)) : ''}${b.drop_in ? ' · drop-in' : ''}</span>`).join('')}</div>` : ''}
   <h4>Skills</h4>${['pole', 'rope', 'yoga'].map(skillBlock).join('') || '<p class="muted">Skill tracking will appear here once your coach starts it.</p>'}

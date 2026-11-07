@@ -4,6 +4,7 @@ import { mailConfigured, sendMessages, siteUrl, wrap } from './mail.js';
 import { esc } from './util.js';
 import { parentExtras, handleParentFeatures } from './features.js';
 import { parentForms, handleParentForms } from './forms.js';
+import { savePhoto } from './photos.js';
 
 const PARENT_SESSION_SECONDS = 7 * 24 * 3600;
 const TOKEN_SECONDS = 7 * 24 * 3600;
@@ -46,7 +47,7 @@ export async function studentDetail(env, s) {
       env.DB.prepare("SELECT b.name,b.days,b.start_time,b.end_time,0 AS drop_in FROM batch_students bs JOIN batches b ON b.id=bs.batch_id WHERE bs.student_id=? UNION SELECT b.name,b.days,b.start_time,b.end_time,1 FROM student_attendance sa JOIN batches b ON b.id=sa.batch_id WHERE sa.student_id=? AND sa.drop_in=1 AND sa.attendance_date>=date('now','-90 days') AND NOT EXISTS(SELECT 1 FROM batch_students x WHERE x.batch_id=sa.batch_id AND x.student_id=sa.student_id) ORDER BY 1").bind(s.id, s.id),
       env.DB.prepare("SELECT status,COUNT(*) n FROM student_attendance WHERE student_id=? AND attendance_date>=date('now','-90 days') GROUP BY status").bind(s.id),
       env.DB.prepare('SELECT sa.attendance_date,sa.status,sa.drop_in,b.name AS batch FROM student_attendance sa LEFT JOIN batches b ON b.id=sa.batch_id WHERE sa.student_id=? ORDER BY sa.attendance_date DESC LIMIT 8').bind(s.id),
-      env.DB.prepare("SELECT sk.id,sk.apparatus,sk.level,sk.name,sk.description,sk.video_url,COALESCE(p.status,'not_started') AS status,p.started_date,p.mastered_date FROM skills sk LEFT JOIN student_skill_progress p ON p.skill_id=sk.id AND p.student_id=? WHERE COALESCE(sk.active,1)=1 AND COALESCE(sk.general,0)=0 ORDER BY sk.apparatus,sk.level,sk.sort_order,sk.name").bind(s.id),
+      env.DB.prepare("SELECT sk.id,sk.apparatus,sk.level,sk.name,sk.description,sk.video_url,sk.image_url,COALESCE(p.status,'not_started') AS status,p.started_date,p.mastered_date FROM skills sk LEFT JOIN student_skill_progress p ON p.skill_id=sk.id AND p.student_id=? WHERE COALESCE(sk.active,1)=1 AND COALESCE(sk.general,0)=0 ORDER BY sk.apparatus,sk.level,sk.sort_order,sk.name").bind(s.id),
       env.DB.prepare('SELECT apparatus,content,photo_url FROM routines WHERE student_id=?').bind(s.id)
     ]);
     const att = { present: 0, late: 0, absent: 0, excused: 0 };
@@ -57,7 +58,7 @@ export async function studentDetail(env, s) {
 
 export async function handleParent(path, method, request, env) {
   const sub = path.replace(/^parent\/?/, '');
-  const body = method === 'POST' ? await request.json().catch(() => ({})) : {};
+  const body = method === 'POST' && sub !== 'photo' ? await request.json().catch(() => ({})) : {}; // a photo upload is raw image bytes
 
   if (sub === 'login' && method === 'POST') {
     const email = cleanEmail(body.email), key = 'parent:' + email + ':' + clientKey(request);
@@ -109,6 +110,41 @@ export async function handleParent(path, method, request, env) {
     const { salt, hash } = await makePassword(body.password);
     await env.DB.prepare('UPDATE parents SET password_hash=?,password_salt=? WHERE id=?').bind(hash, salt, parent.id).run();
     return json({ ok: true });
+  }
+
+  // A parent can add or replace the photo of their own child only.
+  if (sub === 'photo' && method === 'POST') {
+    const sid = new URL(request.url).searchParams.get('student_id');
+    if (!await env.DB.prepare('SELECT 1 FROM parent_students WHERE parent_id=? AND student_id=?').bind(parent.id, sid).first()) return json({ error: 'Not your child.' }, 403);
+    return savePhoto(env, 'student', sid, request);
+  }
+
+  // First sign-in: ask only for what MFU does not have yet (the same things the sign-up form asks for).
+  const PARENT_FIELDS = ['name', 'phone', 'address', 'emergency_name', 'emergency_phone'];
+  if (sub === 'profile' && method === 'GET') {
+    const [me, kids, centers] = (await env.DB.batch([
+      env.DB.prepare('SELECT name,phone,address,emergency_name,emergency_phone FROM parents WHERE id=?').bind(parent.id),
+      env.DB.prepare('SELECT s.id,s.first_name,s.last_name,s.dob,s.gender,s.center_id FROM parent_students ps JOIN students s ON s.id=ps.student_id WHERE ps.parent_id=? AND COALESCE(s.active,1)=1 ORDER BY s.first_name').bind(parent.id),
+      env.DB.prepare('SELECT id,name FROM centers ORDER BY name')
+    ])).map(r => r.results);
+    const missing = PARENT_FIELDS.filter(k => !String(me[0]?.[k] || '').trim());
+    const children = kids.map(k => ({ id: k.id, name: k.first_name + ' ' + (k.last_name || ''), missing: ['dob', 'gender', 'center_id'].filter(f => !k[f]) })).filter(k => k.missing.length);
+    return json({ missing, children, centers });
+  }
+  if (sub === 'profile' && method === 'POST') {
+    const str = (v, n) => String(v ?? '').trim().slice(0, n);
+    const sets = PARENT_FIELDS.filter(k => str(body[k], 500));
+    // Only blank fields are filled, so this form can never overwrite what MFU already has.
+    const st = sets.map(k => env.DB.prepare(`UPDATE parents SET ${k}=? WHERE id=? AND COALESCE(TRIM(${k}),'')=''`).bind(str(body[k], k === 'address' ? 500 : 120), parent.id));
+    const centers = new Set((await env.DB.prepare('SELECT id FROM centers').all()).results.map(c => c.id));
+    for (const k of Array.isArray(body.children) ? body.children.slice(0, 20) : []) {
+      if (!await env.DB.prepare('SELECT 1 FROM parent_students WHERE parent_id=? AND student_id=?').bind(parent.id, k?.id).first()) continue;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(k.dob || '') && k.dob <= new Date().toISOString().slice(0, 10)) st.push(env.DB.prepare('UPDATE students SET dob=? WHERE id=? AND dob IS NULL').bind(k.dob, k.id));
+      if (k.gender === 'Male' || k.gender === 'Female') st.push(env.DB.prepare('UPDATE students SET gender=? WHERE id=? AND gender IS NULL').bind(k.gender, k.id));
+      if (centers.has(k.center_id)) st.push(env.DB.prepare('UPDATE students SET center_id=? WHERE id=? AND center_id IS NULL').bind(k.center_id, k.id));
+    }
+    if (st.length) await env.DB.batch(st);
+    return json({ ok: true, saved: st.length });
   }
 
   if (sub === 'tour' && method === 'POST') {

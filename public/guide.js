@@ -129,15 +129,23 @@
       T(null, '#tour-btn', 'You\'re all set!', 'Replay this tour any time from here.')
     ],
     parent: [
-      T(null, null, 'Welcome to the MFU parent portal 👋', 'A quick look at what you can see and do here. Use Next and Back. You can replay this tour any time with the “? Tour” button.'),
-      T('home', '.child .levels', 'Your child\'s levels', 'Their pole, rope and yoga levels. Everything they need for the next level is listed below.'),
-      T('home', '.child .skills-acc', 'Skills', 'Levels they have passed are marked ✓. Open the next level to see which skills they are learning and have mastered.'),
-      T('home', '.child .note', 'Notes from coaches', 'What they worked on in class and what comes next, so you can practice at home.', { optional: true }),
-      T('home', '.child .pace', 'One-minute sets', 'Each bar is 5 seconds. Shorter bars at the end show where your child got tired — watch this improve over time.', { optional: true }),
-      T('p_events', '#content .event-card, #content .card', 'Events', 'Evaluations, competitions, demos (with arrive times) and any meetings you are invited to.'),
-      T('p_contact', '#pcf', 'Talk to the coach', 'Ask a question or request a meeting. It goes to MFU and your child\'s coaches, and their reply shows up here.'),
+      T(null, null, 'Welcome to the MFU parent portal', 'This tour walks through everything you can see and do. Use Next and Back. You can replay it any time with the “? Tour” button.'),
+      T('home', '.child .avatar', 'Your child’s photo', 'Tap the circle to take or choose a photo of your child. Coaches use it to recognise them in class.'),
+      T('home', '.child .levels', 'Levels', 'Their pole, rope and yoga levels. Passing an evaluation moves them up a level.'),
+      T('home', '.child .skills-acc', 'Skills', 'Open a level to see what they are learning and what they have completed. Tap any skill name to see a photo and a video of it.'),
+      T('home', '.child .progress-grid', 'Progress by month', 'Attendance, skills started and completed, and their one-minute sets over the last six months.', { optional: true }),
+      T('home', '.child .note', 'Notes from coaches', 'What they worked on in class and what comes next, so you can practise at home.', { optional: true }),
+      T('home', '.child .pace', 'One-minute sets', 'Each point is 5 seconds of reps. A drop at the end shows where they got tired; watch it improve over time.', { optional: true }),
+      T('home', '.child .fit-tiles', 'Fitness', 'Their latest dasrang, climbs, push-ups, holds and other tests.', { optional: true }),
+      T('p_skills', '#skapp', 'Every skill, level by level', 'Switch between pole, rope and yoga. Tap a skill to see how it is done.'),
+      T('p_practice', '#content .card', 'Home practice', 'Exercises the coach wants practised at home. Tick the days you did them so the coach can see.', { optional: true }),
+      T('p_events', '#content .event-card, #content .card', 'Events', 'Every evaluation, competition and demo, with times, places and sign-up links. Demos your child is in are marked.'),
       T('p_announcements', '#content .card', 'Announcements', 'News from MFU and your coaches.'),
-      T(null, '#tour-btn', 'You\'re all set!', 'Replay this tour any time from here.')
+      T('p_contact', '#pcf', 'Talk to the coach', 'Ask a question or request a meeting. It goes to MFU and your child’s coaches, and their reply shows up here.'),
+      T('p_links', '#content .link-grid, #content .card', 'Forms and links', 'Waivers, registration and other forms MFU needs from you.', { optional: true }),
+      T('p_shop', '#content .link-grid, #content .card', 'Shop', 'Gear your child needs and where to buy it.', { optional: true }),
+      T('account', '#content .card', 'Your account', 'Change your password and contact details here.', { optional: true }),
+      T(null, '#tour-btn', 'You’re all set', 'Replay this tour any time from here.')
     ]
   };
   const tour = {
@@ -284,7 +292,12 @@
     updateChrome();
     let seen = !!me.tour_done;
     if (role === 'admin') { try { seen = !!localStorage.getItem('mfu-tour-admin'); } catch { seen = true; } }
-    if (!seen && !tour.active) setTimeout(() => { if (state.role === role) tour.start(role); }, 1600);
+    // Parents fill in anything MFU is missing (once per visit) before their first tour.
+    setTimeout(async () => {
+      if (state.role !== role) return;
+      if (role === 'parent') await window.mfuParentDetails?.();
+      if (!seen && !tour.active && state.role === role) tour.start(role);
+    }, 1200);
   };
   const _clear = clearRole;
   clearRole = function () { _clear(); tour.end(false); stack.length = 0; updateChrome(); };

@@ -19,6 +19,9 @@ Database changes apply automatically on the first request after deploy — nothi
 - **General skills**: in the Skill library, tick *General skill* for skills you want to track that are not part of a level. They show on each student's skill progress but never count toward a level or an evaluation.
 - **Database reads**: indexes on attendance, timed sets, fitness and rosters mean pages read only the rows they need. Schema checks run once per schema version instead of on every cold start.
 
+## Photos (R2)
+Students, skills and fitness tests can each have a photo; skills also keep a video link. Photos are shrunk in the browser to about 300 KB, stored in the R2 bucket `mfu-photos` (binding `PHOTOS` in `wrangler.toml`), and cached for a year in the browser and at Cloudflare's edge. A photo loads only when someone opens the skill, student or test it belongs to. Usage counters in `schema_meta` stop uploads before 9.5 GB stored or 900k uploads a month, and pause uncached reads at 9M a month, inside R2's free tier. Parents add their own child's photo by tapping the circle on their child's card.
+
 ## Coach assistant (free AI)
 Coaches talk (Start, Pause, Resume), type or paste class notes on *Coach assistant*. A free AI model turns them into skill updates, counts (dasrang, climbs, push-ups, holds…) and notes, a second free model double-checks them, and the coach ticks what is right before anything saves. Misheard Mallakhamb words ("lower bagli tedhi") are matched against the real skill and student lists.
 

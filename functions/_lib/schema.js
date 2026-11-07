@@ -37,6 +37,7 @@ const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS forms (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT DEFAULT '', kind TEXT NOT NULL DEFAULT 'general', event_id TEXT, demo_id TEXT, fields TEXT NOT NULL DEFAULT '[]', per_child INTEGER DEFAULT 1, audience TEXT NOT NULL DEFAULT 'parents', closes_on TEXT, status TEXT NOT NULL DEFAULT 'open', created_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS form_responses (id TEXT PRIMARY KEY, form_id TEXT NOT NULL REFERENCES forms(id) ON DELETE CASCADE, parent_id TEXT, student_id TEXT REFERENCES students(id) ON DELETE CASCADE, name TEXT, email TEXT, answers TEXT NOT NULL DEFAULT '{}', created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS parent_requests (id TEXT PRIMARY KEY, parent_id TEXT NOT NULL REFERENCES parents(id) ON DELETE CASCADE, student_id TEXT REFERENCES students(id) ON DELETE SET NULL, kind TEXT NOT NULL CHECK(kind IN ('meeting','question')), subject TEXT NOT NULL, message TEXT DEFAULT '', preferred_times TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'open', reply TEXT, replied_by TEXT, replied_at TEXT, meeting_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE TABLE IF NOT EXISTS metric_photos (metric TEXT PRIMARY KEY, image_url TEXT)`,
   `CREATE TABLE IF NOT EXISTS announcements (id TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT DEFAULT '', audience TEXT NOT NULL DEFAULT 'all' CHECK(audience IN ('all','parents','coaches')), center_id TEXT, pinned INTEGER DEFAULT 0, created_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`
 ];
 
@@ -108,7 +109,7 @@ const INDEXES = [
 ];
 
 // Bump when STATEMENTS, COLUMNS or INDEXES change. A cold start then costs one read instead of ~90 queries.
-const SCHEMA_VERSION = '2026-11-03.1';
+const SCHEMA_VERSION = '2026-11-07.1';
 
 // The original sessions table only allowed admin and parent roles. Rebuild it once so coach sessions fit, keeping everyone signed in.
 async function upgradeSessions(env) {
