@@ -100,6 +100,17 @@
     };
   });
 
+  /* ---- play a video inside the app. Drive videos are shared "anyone with the link", so no Google sign-in is needed. ---- */
+  const embed = u => { const d = /drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/.exec(u), y = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([A-Za-z0-9_-]{6,})/.exec(u);
+    return d ? `https://drive.google.com/file/d/${d[1]}/preview` : y ? `https://www.youtube-nocookie.com/embed/${y[1]}` : null; };
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-play]'); if (!b) return;
+    e.preventDefault();
+    const src = embed(b.dataset.play);
+    if (!src) return window.open(b.dataset.play, '_blank', 'noopener');
+    openModal('Video', `<div class="vid-frame"><iframe src="${esc(src)}" allow="autoplay; fullscreen" allowfullscreen title="Video"></iframe></div><p class="muted">Just uploaded? Google can take a few minutes to get a video ready.</p>`, { wide: true });
+  });
+
   /* ---- a student's photo, fetched only when their name is tapped (attendance and other lists) ---- */
   document.addEventListener('click', async e => {
     const b = e.target.closest('[data-photo-student]'); if (!b) return;
@@ -124,11 +135,11 @@
     const b = e.target.closest('[data-skill-view]'); if (!b) return;
     e.preventDefault();
     const d = b.dataset, staff = state.role === 'admin' || state.role === 'coach';
-    const vid = () => d.video ? `<a class="btn secondary small" href="${esc(safeUrl(d.video))}" target="_blank" rel="noopener noreferrer">Watch the video</a>` : '';
+    const vid = () => d.video ? `<button type="button" class="btn secondary small" data-play="${esc(safeUrl(d.video))}">Watch the video</button>` : '';
     const m = openModal(d.name, `${d.desc ? `<p>${esc(d.desc)}</p>` : ''}<div id="skphoto"></div><div class="card-actions section-gap-sm" id="skvid">${vid()}${staff ? `<button type="button" class="btn secondary small" id="skrec">${d.video ? 'Replace video' : 'Record a video'}</button>` : ''}</div>`);
     if (staff) m.$('#skrec').onclick = async () => {
       const url = await window.mfuRecordVideo(d.name); if (!url) return;
-      try { await api('skills/' + encodeURIComponent(d.skillView), { method: 'PUT', body: JSON.stringify({ video_url: url }) }); d.video = url; const a = m.$('#skvid a'); if (a) a.href = url; else m.$('#skvid').insertAdjacentHTML('afterbegin', vid()); } catch (e) { toast(e.message); }
+      try { await api('skills/' + encodeURIComponent(d.skillView), { method: 'PUT', body: JSON.stringify({ video_url: url }) }); d.video = url; const a = m.$('#skvid [data-play]'); if (a) a.dataset.play = url; else m.$('#skvid').insertAdjacentHTML('afterbegin', vid()); } catch (e) { toast(e.message); }
     };
     m.$('#skphoto').append(window.mfuPhotoBlock(d.img, { alt: d.name, route: staff ? 'photo?kind=skill&id=' + encodeURIComponent(d.skillView) : '', onSaved: u => { d.img = u; } }));
   });
