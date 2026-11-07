@@ -822,3 +822,4 @@ main>header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;heigh
 .photo-block img{display:block;max-width:100%;max-height:60vh;border-radius:var(--r-card);background:var(--raised);object-fit:contain}
 .avatar[role=button]{cursor:pointer}
 .avatar[role=button]:hover{outline:2px solid var(--orange);outline-offset:2px}
+.vid{width:100%;max-height:55vh;border-radius:var(--r-card);background:#000}

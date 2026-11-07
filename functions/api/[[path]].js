@@ -12,6 +12,7 @@ import { GOOGLE_SCOPES } from '../_lib/google.js';
 import { handleInsights } from '../_lib/insights.js';
 import { handleAssistant } from '../_lib/ai.js';
 import { servePhoto, savePhoto } from '../_lib/photos.js';
+import { handleVideo } from '../_lib/video.js';
 // Coaches can do everything the admin can except manage coach and parent accounts.
 const adminOnly = (path, method) => { const [root] = path.split('/'); return root === 'coach-accounts' || root === 'signups' || (root === 'parents' && method !== 'GET') || (root === 'coaches' && method !== 'GET'); };
 // One random code per database, made on first use.
@@ -75,6 +76,7 @@ export async function onRequest({request,env,params}){
  if((method==='POST'||method==='PUT')&&!path.startsWith('evaluations')){const last=Number((await env.DB.prepare('SELECT v FROM schema_meta WHERE k=?').bind('mailcd:'+path).first())?.v||0),wait=last+600-Math.floor(Date.now()/1000);if(wait>0&&request.headers.get('x-bypass-cooldown')!=='1')return json({error:'This button emailed more than 20 people less than 10 minutes ago.',cooldown:true,wait},429);env={...env,MAIL_GUARD:path}}
  if(path==='coach-accounts'||path.startsWith('coach-accounts/'))return handleCoachAccounts(path,method,request,env);
  if(path==='signups'||path.startsWith('signups/'))return handleSignupReview(path,method,request,env,actor);
+ { const v=await handleVideo(path,method,request,env,actor);if(v)return v }
  if(path==='photo'&&method==='POST')return savePhoto(env,url.searchParams.get('kind'),url.searchParams.get('id'),request,actor.name);
  if(path==='metric-photos'&&method==='GET')return json((await env.DB.prepare('SELECT metric,image_url FROM metric_photos').all()).results);
  { const bi=await handleInsights(path,method,env,url);if(bi)return bi }

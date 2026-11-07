@@ -22,6 +22,9 @@ Database changes apply automatically on the first request after deploy — nothi
 ## Photos (R2)
 Students, skills and fitness tests can each have a photo; skills also keep a video link. Photos are shrunk in the browser to about 300 KB, stored in the R2 bucket `mfu-photos` (binding `PHOTOS` in `wrangler.toml`), and cached for a year in the browser and at Cloudflare's edge. A photo loads only when someone opens the skill, student or test it belongs to. Usage counters in `schema_meta` stop uploads before 9.5 GB stored or 900k uploads a month, and pause uncached reads at 9M a month, inside R2's free tier. Parents add their own child's photo by tapping the circle on their child's card.
 
+## Videos (Google Drive, not R2)
+Coaches record videos inside the app (skills, and a student's Photos tab). They are recorded small, about 4–7 MB a minute, and the browser uploads them straight to the MFU Google account's Drive (free 15 GB, shared with Gmail) using the Google connection already set up for email; the app stores the Drive link. Uploads stop when less than 500 MB of Drive is left so email keeps working. Videos are viewable by anyone with the link, which is only shown inside MFU Tracker.
+
 ## Coach assistant (free AI)
 Coaches talk (Start, Pause, Resume), type or paste class notes on *Coach assistant*. A free AI model turns them into skill updates, counts (dasrang, climbs, push-ups, holds…) and notes, a second free model double-checks them, and the coach ticks what is right before anything saves. Misheard Mallakhamb words ("lower bagli tedhi") are matched against the real skill and student lists.
 

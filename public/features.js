@@ -479,10 +479,14 @@
       },
       photos: async () => {
         const photos = await api('student-photos?student_id=' + encodeURIComponent(student.id));
-        m.$('#spview').innerHTML = `<form id="phf" class="card soft-card"><div class="form-grid"><label>Caption<input name="caption" placeholder="e.g. First full dive!"></label><label>Date<input type="date" name="taken_date" value="${todayStr()}"></label><label class="wide">Video link (optional, instead of a photo)<input type="url" name="url" placeholder="https://youtube.com/…"></label></div><div class="modal-actions"><button type="button" class="btn secondary" id="phvid">Add video link</button><button type="button" class="btn" id="phup">Upload a photo</button></div></form><div class="section-gap">${photoGrid(photos, true) || '<p class="muted">No photos yet.</p>'}</div>`;
+        m.$('#spview').innerHTML = `<form id="phf" class="card soft-card"><div class="form-grid"><label>Caption<input name="caption" placeholder="e.g. First full dive!"></label><label>Date<input type="date" name="taken_date" value="${todayStr()}"></label><label class="wide">Video link (optional, instead of a photo)<input type="url" name="url" placeholder="https://youtube.com/…"></label></div><div class="modal-actions"><button type="button" class="btn secondary" id="phvid">Add video link</button><button type="button" class="btn secondary" id="phrec">Record a video</button><button type="button" class="btn" id="phup">Add a photo</button></div></form><div class="section-gap">${photoGrid(photos, true) || '<p class="muted">No photos yet.</p>'}</div>`;
         const ph = () => Object.fromEntries(new FormData(m.$('#phf')));
         m.$('#phf').onsubmit = e => e.preventDefault();
-        m.$('#phup').onclick = async () => { const f = ph(); if (await mfuPickPhoto(`photo?kind=progress&id=${encodeURIComponent(student.id)}&caption=${encodeURIComponent(f.caption)}&taken_date=${f.taken_date}`).catch(() => null)) views.photos(); };
+        const addPhoto = camera => async () => { const f = ph(); if (await mfuPickPhoto(`photo?kind=progress&id=${encodeURIComponent(student.id)}&caption=${encodeURIComponent(f.caption)}&taken_date=${f.taken_date}`, { camera }).catch(() => null)) views.photos(); };
+        m.$('#phup').onclick = addPhoto(false);
+        // Phones: a camera button beside it.
+        if (matchMedia('(pointer: coarse)').matches) { m.$('#phup').textContent = 'Choose photo'; m.$('#phup').insertAdjacentHTML('afterend', '<button type="button" class="btn" id="phcam">Take photo</button>'); m.$('#phcam').onclick = addPhoto(true); }
+        m.$('#phrec').onclick = async () => { const f = ph(), url = await mfuRecordVideo(`${nameOf(student)} ${f.taken_date || ''} ${f.caption || ''}`.trim()); if (!url) return; try { await api('student-photos', { method: 'POST', body: JSON.stringify({ student_id: student.id, ...f, url }) }); views.photos(); } catch (e) { toast(e.message); } };
         m.$('#phvid').onclick = async () => { try { await api('student-photos', { method: 'POST', body: JSON.stringify({ student_id: student.id, ...ph() }) }); toast('Video added'); views.photos(); } catch (err) { toast(err.message); } };
         m.$$('[data-phdel]').forEach(b => b.onclick = async () => { if (confirm('Remove this photo?')) { await api('student-photos/' + b.dataset.phdel, { method: 'DELETE' }); views.photos(); } });
       }

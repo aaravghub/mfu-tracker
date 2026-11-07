@@ -21,10 +21,14 @@
     throw Error('Could not make that photo small enough. Try another one.');
   }
 
-  // Asks for a photo (the camera on phones), shrinks it and uploads it. Resolves to the new photo URL, or null if cancelled.
-  window.mfuPickPhoto = (route) => new Promise((resolve, reject) => {
+  // Phones and tablets get a "Take photo" button that opens the camera straight away.
+  const touch = matchMedia('(pointer: coarse)').matches;
+
+  // Asks for a photo (the camera when `camera`), shrinks it and uploads it. Resolves to the new photo URL, or null if cancelled.
+  window.mfuPickPhoto = (route, { camera = false } = {}) => new Promise((resolve, reject) => {
     const input = document.createElement('input');
     input.type = 'file'; input.accept = 'image/*';
+    if (camera) input.capture = 'environment';
     input.onchange = async () => {
       const file = input.files?.[0]; if (!file) return resolve(null);
       try {
@@ -44,12 +48,57 @@
     const box = document.createElement('div'); box.className = 'photo-block';
     const paint = u => {
       box.innerHTML = (u ? `<img src="${esc(safeUrl(u))}" alt="${esc(alt)}" loading="lazy" decoding="async">` : '<p class="muted">No photo yet.</p>') +
-        (route ? `<button type="button" class="btn secondary small">${u ? 'Change photo' : 'Add photo'}</button>` : '');
-      box.querySelector('button')?.addEventListener('click', async () => { const nu = await window.mfuPickPhoto(route).catch(() => null); if (nu) { paint(nu); onSaved?.(nu); } });
+        (!route ? '' : touch ? '<div class="card-actions"><button type="button" class="btn small" data-cam="1">Take photo</button><button type="button" class="btn secondary small" data-cam="">Choose photo</button></div>'
+          : `<button type="button" class="btn secondary small" data-cam="">${u ? 'Change photo' : 'Add photo'}</button>`);
+      box.querySelectorAll('[data-cam]').forEach(b => b.addEventListener('click', async () => { const nu = await window.mfuPickPhoto(route, { camera: !!b.dataset.cam }).catch(() => null); if (nu) { paint(nu); onSaved?.(nu); } }));
     };
     paint(url);
     return box;
   };
+
+  /* ---- videos: recorded small in the app (or picked), uploaded straight to the MFU Google Drive, never to R2 ---- */
+  const VIDEO_TYPES = ['video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  const sendToDrive = async (file, name) => {
+    const { upload_url } = await api('video/start', { method: 'POST', body: JSON.stringify({ name, type: file.type.split(';')[0], size: file.size }) });
+    toast('Uploading video…');
+    const r = await fetch(upload_url, { method: 'PUT', headers: { 'content-type': file.type.split(';')[0] }, body: file });
+    if (!r.ok) throw Error('Google Drive did not accept the video (HTTP ' + r.status + ').');
+    const { url } = await api('video/finish', { method: 'POST', body: JSON.stringify({ file_id: (await r.json()).id }) });
+    toast('Video saved'); return url;
+  };
+  // Resolves to the video's Drive link, or null if closed without saving.
+  window.mfuRecordVideo = name => new Promise(resolve => {
+    const rec = window.MediaRecorder && navigator.mediaDevices?.getUserMedia;
+    const m = openModal('Record a video', `${rec ? '<video id="vlive" class="vid" muted playsinline autoplay></video><p class="muted" id="vinfo">Up to 3 minutes. Recorded small (about 7 MB a minute) so Drive stays free.</p><div class="card-actions"><button type="button" class="btn" id="vrec">Start recording</button></div>' : '<p class="muted">This browser cannot record here. Choose a video you already took.</p>'}
+      <div class="card-actions section-gap-sm"><button type="button" class="btn secondary small" id="vpick">Choose a video instead</button></div>`, { wide: true });
+    let stream = null, done = false;
+    const finish = url => { if (done) return; done = true; stream?.getTracks().forEach(t => t.stop()); m.close(); resolve(url); };
+    m.root.addEventListener('click', e => { if (e.target === m.root || e.target.closest('[data-close]')) { done = true; stream?.getTracks().forEach(t => t.stop()); resolve(null); } });
+    const upload = async file => { try { finish(await sendToDrive(file, name)); } catch (e) { toast(e.message); } };
+    m.$('#vpick').onclick = () => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'video/*'; i.onchange = () => i.files[0] && upload(i.files[0]); i.click(); };
+    if (!rec) return;
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 854 }, height: { ideal: 480 }, frameRate: { ideal: 24 } }, audio: true })
+      .then(s => { stream = s; m.$('#vlive').srcObject = s; })
+      .catch(() => { m.$('#vinfo').textContent = 'Allow the camera and microphone for this site, or choose a video instead.'; m.$('#vrec').hidden = true; });
+    let mr = null, chunks = [], t0 = 0, tick = 0;
+    m.$('#vrec').onclick = () => {
+      if (mr) return mr.stop();
+      const mimeType = VIDEO_TYPES.find(t => MediaRecorder.isTypeSupported(t)) || '';
+      mr = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 850000, audioBitsPerSecond: 64000 });
+      chunks = []; mr.ondataavailable = e => e.data.size && chunks.push(e.data);
+      mr.onstop = () => {
+        clearInterval(tick);
+        const blob = new Blob(chunks, { type: mr.mimeType || 'video/webm' });
+        const file = new File([blob], name + (blob.type.includes('mp4') ? '.mp4' : '.webm'), { type: blob.type });
+        stream.getTracks().forEach(t => t.stop());
+        const v = m.$('#vlive'); v.srcObject = null; v.src = URL.createObjectURL(blob); v.muted = false; v.controls = true;
+        m.$('#vinfo').textContent = `${Math.round(blob.size / 1e5) / 10} MB. Save it, or close to throw it away.`;
+        m.$('#vrec').textContent = 'Save video'; m.$('#vrec').onclick = () => { m.$('#vrec').disabled = true; upload(file); };
+      };
+      mr.start(1000); t0 = Date.now(); m.$('#vrec').textContent = 'Stop';
+      tick = setInterval(() => { const s = Math.round((Date.now() - t0) / 1000); m.$('#vinfo').textContent = `Recording ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; if (s >= 180) mr.stop(); }, 500);
+    };
+  });
 
   /* ---- a student's photo, fetched only when their name is tapped (attendance and other lists) ---- */
   document.addEventListener('click', async e => {
@@ -75,7 +124,12 @@
     const b = e.target.closest('[data-skill-view]'); if (!b) return;
     e.preventDefault();
     const d = b.dataset, staff = state.role === 'admin' || state.role === 'coach';
-    const m = openModal(d.name, `${d.desc ? `<p>${esc(d.desc)}</p>` : ''}<div id="skphoto"></div>${d.video ? `<p class="section-gap-sm"><a class="btn secondary small" href="${esc(safeUrl(d.video))}" target="_blank" rel="noopener noreferrer">Watch the video</a></p>` : ''}`);
+    const vid = () => d.video ? `<a class="btn secondary small" href="${esc(safeUrl(d.video))}" target="_blank" rel="noopener noreferrer">Watch the video</a>` : '';
+    const m = openModal(d.name, `${d.desc ? `<p>${esc(d.desc)}</p>` : ''}<div id="skphoto"></div><div class="card-actions section-gap-sm" id="skvid">${vid()}${staff ? `<button type="button" class="btn secondary small" id="skrec">${d.video ? 'Replace video' : 'Record a video'}</button>` : ''}</div>`);
+    if (staff) m.$('#skrec').onclick = async () => {
+      const url = await window.mfuRecordVideo(d.name); if (!url) return;
+      try { await api('skills/' + encodeURIComponent(d.skillView), { method: 'PUT', body: JSON.stringify({ video_url: url }) }); d.video = url; const a = m.$('#skvid a'); if (a) a.href = url; else m.$('#skvid').insertAdjacentHTML('afterbegin', vid()); } catch (e) { toast(e.message); }
+    };
     m.$('#skphoto').append(window.mfuPhotoBlock(d.img, { alt: d.name, route: staff ? 'photo?kind=skill&id=' + encodeURIComponent(d.skillView) : '', onSaved: u => { d.img = u; } }));
   });
 })();
