@@ -18,7 +18,8 @@ async function geminiModels(key) {
   const ver = id => Number(/gemini-(\d+(?:\.\d+)?)/.exec(id)?.[1] || 0);
   const list = (r?.data || []).map(m => String(m.id).replace(/^models\//, ''))
     .filter(id => /^gemini-[\d.]+-flash/.test(id) && !/image|tts|audio|live|embed|thinking|exp/.test(id))
-    .sort((a, b) => ver(b) - ver(a) || a.includes('lite') - b.includes('lite') || a.includes('preview') - b.includes('preview') || a.length - b.length)
+    // Lite first: it answers in seconds; the full Flash models think first and can take over 10 s on a long roster.
+    .sort((a, b) => b.includes('lite') - a.includes('lite') || ver(b) - ver(a) || a.includes('preview') - b.includes('preview') || a.length - b.length)
     .slice(0, 4);
   gemCache = { at: Date.now(), list: list.length ? list : ['gemini-2.5-flash', 'gemini-2.5-flash-lite'] };
   return gemCache.list;
@@ -40,29 +41,40 @@ async function candidates(env) {
   const out = [];
   // Fast providers first (answers in a few seconds); OpenRouter's free models are often queued, so they are the backup.
   if (env.GROQ_API_KEY) for (const m of GROQ_MODELS) out.push({ url: 'https://api.groq.com/openai/v1/chat/completions', key: env.GROQ_API_KEY, model: m, name: 'groq/' + m });
-  if (env.GEMINI_API_KEY) for (const m of await geminiModels(env.GEMINI_API_KEY)) out.push({ url: GEMINI + '/chat/completions', key: env.GEMINI_API_KEY, model: m, name: 'gemini/' + m, extra: { reasoning_effort: 'low' } });
+  if (env.GEMINI_API_KEY) for (const m of await geminiModels(env.GEMINI_API_KEY)) out.push({ url: GEMINI + '/chat/completions', key: env.GEMINI_API_KEY, model: m, name: 'gemini/' + m, extra: { reasoning_effort: 'low' }, race: true });
   if (env.OPENROUTER_API_KEY) for (const m of await openRouterFree()) out.push({ url: 'https://openrouter.ai/api/v1/chat/completions', key: env.OPENROUTER_API_KEY, model: m, name: 'openrouter/' + m });
   // Start with whichever model answered last time, so a model that ran out is not retried first.
   const i = out.findIndex(c => c.name === lastGood);
   return i > 0 ? [...out.slice(i), ...out.slice(0, i)] : out;
 }
 
-// Tries free models in turn until one answers with JSON, but never past `deadline` (a coach waits about 20 seconds at most).
-// Rate limits, outages, slow models and bad JSON all move on to the next; `tried` says why each one failed.
+// One model call. Resolves to { data, model } or throws an Error saying why it failed.
+async function callOne(c, messages, ms, stop) {
+  let r;
+  try { r = await fetch(c.url, { method: 'POST', signal: AbortSignal.any([AbortSignal.timeout(ms), stop]), headers: { 'content-type': 'application/json', authorization: 'Bearer ' + c.key }, body: JSON.stringify({ model: c.model, messages, temperature: 0, ...c.extra }) }); }
+  catch (e) { throw Error(e.name === 'TimeoutError' ? 'too slow' : stop.aborted ? 'cancelled' : 'network error'); }
+  if (!r.ok) throw Error(`${r.status} ${String((await r.json().catch(() => ({})))?.error?.message || '').slice(0, 120)}`);
+  const data = extractJson((await r.json().catch(() => null))?.choices?.[0]?.message?.content || '');
+  if (!data) throw Error('answer was not JSON');
+  return { data, model: c.name };
+}
+
+// Asks the fast models (Gemini) all at once and takes the first good answer, cancelling the rest; then tries the
+// others (OpenRouter's free models) one by one. Never past `deadline`; `tried` says why each model failed.
 export async function askFree(env, messages, { skip = '', deadline = Date.now() + 20000 } = {}) {
-  const tried = [];
-  for (const c of await candidates(env)) {
-    if (c.name === skip) continue;
+  const list = (await candidates(env)).filter(c => c.name !== skip), tried = [];
+  const racers = list.filter(c => c.race).slice(0, 3), rest = list.filter(c => !racers.includes(c));
+  const note = c => e => { tried.push(`${c.name}: ${e.message}`); throw e; };
+  if (racers.length) {
+    const stop = new AbortController();
+    try { const win = await Promise.any(racers.map(c => callOne(c, messages, deadline - Date.now(), stop.signal).catch(note(c)))); stop.abort(); lastGood = win.model; return win; }
+    catch { /* every racer failed: fall through to the others */ }
+  }
+  for (const c of rest) {
     const left = deadline - Date.now();
     if (left < 1500) break;
-    try {
-      const r = await fetch(c.url, { method: 'POST', signal: AbortSignal.timeout(Math.min(left, 12000)), headers: { 'content-type': 'application/json', authorization: 'Bearer ' + c.key }, body: JSON.stringify({ model: c.model, messages, temperature: 0, ...c.extra }) });
-      if (!r.ok) { tried.push(`${c.name}: ${r.status} ${String((await r.json().catch(() => ({})))?.error?.message || '').slice(0, 120)}`); continue; }
-      const data = extractJson((await r.json())?.choices?.[0]?.message?.content || '');
-      if (!data) { tried.push(c.name + ': answer was not JSON'); continue; }
-      lastGood = c.name;
-      return { data, model: c.name };
-    } catch (e) { tried.push(c.name + ': ' + (e.name === 'TimeoutError' ? 'too slow' : 'network error')); }
+    try { const win = await callOne(c, messages, Math.min(left, 12000), new AbortController().signal); lastGood = win.model; return win; }
+    catch (e) { tried.push(`${c.name}: ${e.message}`); }
   }
   return { data: null, tried };
 }
