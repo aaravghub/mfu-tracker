@@ -4,11 +4,25 @@ import { json } from './util.js';
 // Nothing is saved here; the browser shows the list and saves only what the coach confirms.
 
 const OR_MODELS_URL = 'https://openrouter.ai/api/v1/models';
-// shortcut: Groq and Gemini model names are fixed; update them here if those providers rename their free models.
+// shortcut: Groq model names are fixed; update them here if Groq renames its free models.
 const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
-const GEMINI_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash']; // fastest first
+const GEMINI = 'https://generativelanguage.googleapis.com/v1beta/openai';
 const STATUSES = new Set(['learning', 'mastered']);
-let orCache = { at: 0, list: [] }, lastGood = '';
+let orCache = { at: 0, list: [] }, gemCache = { at: 0, list: [] }, lastGood = '';
+
+// The Flash models this Gemini key can use right now, newest first (full Flash before Lite: better at matching names).
+// Asked from Google and refreshed hourly, so a renamed or retired model never breaks the assistant.
+async function geminiModels(key) {
+  if (Date.now() - gemCache.at < 36e5 && gemCache.list.length) return gemCache.list;
+  const r = await fetch(GEMINI + '/models', { headers: { authorization: 'Bearer ' + key } }).then(x => x.json()).catch(() => null);
+  const ver = id => Number(/gemini-(\d+(?:\.\d+)?)/.exec(id)?.[1] || 0);
+  const list = (r?.data || []).map(m => String(m.id).replace(/^models\//, ''))
+    .filter(id => /^gemini-[\d.]+-flash/.test(id) && !/image|tts|audio|live|embed|thinking|exp/.test(id))
+    .sort((a, b) => ver(b) - ver(a) || a.includes('lite') - b.includes('lite') || a.includes('preview') - b.includes('preview') || a.length - b.length)
+    .slice(0, 4);
+  gemCache = { at: Date.now(), list: list.length ? list : ['gemini-2.5-flash', 'gemini-2.5-flash-lite'] };
+  return gemCache.list;
+}
 
 // Every model OpenRouter currently prices at $0, biggest context first. Refreshed hourly, so new free models join on their own.
 async function openRouterFree() {
@@ -26,30 +40,29 @@ async function candidates(env) {
   const out = [];
   // Fast providers first (answers in a few seconds); OpenRouter's free models are often queued, so they are the backup.
   if (env.GROQ_API_KEY) for (const m of GROQ_MODELS) out.push({ url: 'https://api.groq.com/openai/v1/chat/completions', key: env.GROQ_API_KEY, model: m, name: 'groq/' + m });
-  if (env.GEMINI_API_KEY) for (const m of GEMINI_MODELS) out.push({ url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', key: env.GEMINI_API_KEY, model: m, name: 'gemini/' + m });
+  if (env.GEMINI_API_KEY) for (const m of await geminiModels(env.GEMINI_API_KEY)) out.push({ url: GEMINI + '/chat/completions', key: env.GEMINI_API_KEY, model: m, name: 'gemini/' + m, extra: { reasoning_effort: 'low' } });
   if (env.OPENROUTER_API_KEY) for (const m of await openRouterFree()) out.push({ url: 'https://openrouter.ai/api/v1/chat/completions', key: env.OPENROUTER_API_KEY, model: m, name: 'openrouter/' + m });
   // Start with whichever model answered last time, so a model that ran out is not retried first.
   const i = out.findIndex(c => c.name === lastGood);
   return i > 0 ? [...out.slice(i), ...out.slice(0, i)] : out;
 }
 
-// Tries free models in turn until one answers with JSON, but never past `deadline` (a coach waits about 10 seconds at most).
-// Rate limits, outages, slow models and bad JSON all move on to the next.
-export async function askFree(env, messages, { skip = '', deadline = Date.now() + 9500 } = {}) {
+// Tries free models in turn until one answers with JSON, but never past `deadline` (a coach waits about 20 seconds at most).
+// Rate limits, outages, slow models and bad JSON all move on to the next; `tried` says why each one failed.
+export async function askFree(env, messages, { skip = '', deadline = Date.now() + 20000 } = {}) {
   const tried = [];
   for (const c of await candidates(env)) {
     if (c.name === skip) continue;
     const left = deadline - Date.now();
     if (left < 1500) break;
-    tried.push(c.name);
     try {
-      const r = await fetch(c.url, { method: 'POST', signal: AbortSignal.timeout(Math.min(left, 5000)), headers: { 'content-type': 'application/json', authorization: 'Bearer ' + c.key }, body: JSON.stringify({ model: c.model, messages, temperature: 0 }) });
-      if (!r.ok) continue;
+      const r = await fetch(c.url, { method: 'POST', signal: AbortSignal.timeout(Math.min(left, 12000)), headers: { 'content-type': 'application/json', authorization: 'Bearer ' + c.key }, body: JSON.stringify({ model: c.model, messages, temperature: 0, ...c.extra }) });
+      if (!r.ok) { tried.push(`${c.name}: ${r.status} ${String((await r.json().catch(() => ({})))?.error?.message || '').slice(0, 120)}`); continue; }
       const data = extractJson((await r.json())?.choices?.[0]?.message?.content || '');
-      if (!data) continue;
+      if (!data) { tried.push(c.name + ': answer was not JSON'); continue; }
       lastGood = c.name;
       return { data, model: c.name };
-    } catch { /* timeout or network: next model */ }
+    } catch (e) { tried.push(c.name + ': ' + (e.name === 'TimeoutError' ? 'too slow' : 'network error')); }
   }
   return { data: null, tried };
 }
@@ -132,7 +145,7 @@ export async function handleAssistant(path, method, request, env) {
   if (!text) return json({ error: 'Say or type something first.' }, 400);
   if (body.mode === 'attendance') return attendanceFromWords(env, text, body);
   const metrics = (Array.isArray(body.metrics) ? body.metrics : []).filter(m => Array.isArray(m) && /^[a-z0-9_]{1,40}$/.test(m[0])).slice(0, 60);
-  const deadline = Date.now() + 9500;
+  const deadline = Date.now() + 20000;
   const [students, skills, batches, members] = (await env.DB.batch([
     env.DB.prepare('SELECT id,first_name,last_name FROM students WHERE COALESCE(active,1)=1'),
     env.DB.prepare('SELECT id,apparatus,level,name,COALESCE(general,0) AS general FROM skills WHERE COALESCE(active,1)=1'),
@@ -145,14 +158,14 @@ export async function handleAssistant(path, method, request, env) {
   const lists = `Students (code|name):\n${students.map(s => st.to.get(s.id) + '|' + s.first_name + ' ' + (s.last_name || '')).join('\n')}\n\nBatches (code|name|days):\n${batches.map(b => bc.to.get(b.id) + '|' + b.name + '|' + (b.days || '')).join('\n')}\n\nSkills (code|apparatus level|name):\n${skills.map(s => kc.to.get(s.id) + '|' + s.apparatus + ' ' + (s.general ? 'general' : 'L' + s.level) + '|' + s.name).join('\n')}\n\nTests (key|name):\n${metrics.map(m => m[0] + '|' + String(m[1]).slice(0, 60)).join('\n')}`;
 
   const first = await askFree(env, [{ role: 'system', content: PROMPT + '\n\n' + lists }, { role: 'user', content: text }], { deadline });
-  if (!first.data) return json({ error: 'The free AI models are busy right now. Try again in a minute, or keep it shorter.', tried: first.tried }, 503);
+  if (!first.data) return json({ error: 'No free AI model answered in time. ' + first.tried.join(' · '), tried: first.tried }, 503);
   const result = validate(expandActions(first.data, { student: st, skill: kc, batch: bc, rosters }), { students, skills, metrics: metrics.map(m => m[0]) });
 
   // Second look, preferably by a different free model: flag actions the words do not support.
   const names = new Map(students.map(s => [s.id, s.first_name + ' ' + (s.last_name || '')])), sk = new Map(skills.map(s => [s.id, s.name]));
   const listed = result.actions.map((a, i) => `${i}: ${names.get(a.student)} ${a.type === 'skill' ? a.status + ' ' + sk.get(a.skill) : a.type === 'count' ? a.metric + ' = ' + a.value : 'note: ' + a.worked_on + ' ' + a.next_steps}`).join('\n');
   // Only when there is time left; the coach still reviews every item either way.
-  const check = result.actions.length && deadline - Date.now() > 3000 ? await askFree(env, [{ role: 'system', content: CHECK }, { role: 'user', content: `Coach said:\n${text}\n\nProposed actions:\n${listed}` }], { skip: first.model, deadline }) : { data: null };
+  const check = result.actions.length && deadline - Date.now() > 5000 ? await askFree(env, [{ role: 'system', content: CHECK }, { role: 'user', content: `Coach said:\n${text}\n\nProposed actions:\n${listed}` }], { skip: first.model, deadline }) : { data: null };
   const flags = new Map((Array.isArray(check.data?.wrong) ? check.data.wrong : []).filter(w => Number.isInteger(w?.index)).map(w => [w.index, String(w.why || '').slice(0, 200)]));
   result.actions.forEach((a, i) => { if (flags.has(i)) a.doubt = flags.get(i) || 'The double-check was not sure about this one.'; });
   for (const m of (Array.isArray(check.data?.missing) ? check.data.missing : []).slice(0, 10)) result.unclear.push('Possibly missed: ' + String(m).slice(0, 200));
@@ -167,18 +180,18 @@ async function attendanceFromWords(env, text, body) {
     env.DB.prepare('SELECT id,first_name,last_name FROM students WHERE COALESCE(active,1)=1'),
     env.DB.prepare('SELECT id,name FROM coaches WHERE COALESCE(active,1)=1')
   ])).map(r => r.results);
-  const deadline = Date.now() + 9500;
+  const deadline = Date.now() + 20000;
   const onRoster = new Set(roster.map(r => r.id)), onCrew = new Set(crew.map(r => r.id));
   const name = s => s.first_name + ' ' + (s.last_name || '');
   const st = shortCodes('s', students), cc = shortCodes('c', coaches);
   const lists = `Roster students (id|name):\n${students.filter(s => onRoster.has(s.id)).map(s => st.to.get(s.id) + '|' + name(s)).join('\n')}\n\nBatch coaches (id|name):\n${coaches.filter(c => onCrew.has(c.id)).map(c => cc.to.get(c.id) + '|' + c.name).join('\n')}\n\nOther students who may drop in (id|name):\n${students.filter(s => !onRoster.has(s.id)).map(s => st.to.get(s.id) + '|' + name(s)).join('\n')}\n\nOther coaches (id|name):\n${coaches.filter(c => !onCrew.has(c.id)).map(c => cc.to.get(c.id) + '|' + c.name).join('\n')}`;
   const first = await askFree(env, [{ role: 'system', content: ATT_PROMPT + '\n\n' + lists }, { role: 'user', content: text }], { deadline });
-  if (!first.data) return json({ error: 'The free AI models are busy right now. Try again in a minute.', tried: first.tried }, 503);
+  if (!first.data) return json({ error: 'No free AI model answered in time. ' + first.tried.join(' · '), tried: first.tried }, 503);
   for (const m of Array.isArray(first.data.marks) ? first.data.marks : []) m.id = (m.kind === 'coach' ? cc : st).from.get(m.id) || m.id;
   const result = validateAttendance(first.data, { students, coaches });
   const who = new Map([...students.map(s => ['student' + s.id, name(s)]), ...coaches.map(c => ['coach' + c.id, c.name])]);
   const listed = [result.rest ? `everyone else on the roster: ${result.rest}` : null, ...result.marks.map((m, i) => `${i}: ${who.get(m.kind + m.id)} ${m.status}`)].filter(Boolean).join('\n');
-  const check = result.marks.length && deadline - Date.now() > 3000 ? await askFree(env, [{ role: 'system', content: CHECK }, { role: 'user', content: `Coach said:\n${text}\n\nProposed attendance:\n${listed}` }], { skip: first.model, deadline }) : { data: null };
+  const check = result.marks.length && deadline - Date.now() > 5000 ? await askFree(env, [{ role: 'system', content: CHECK }, { role: 'user', content: `Coach said:\n${text}\n\nProposed attendance:\n${listed}` }], { skip: first.model, deadline }) : { data: null };
   for (const w of Array.isArray(check.data?.wrong) ? check.data.wrong : []) if (result.marks[w?.index]) result.marks[w.index].doubt = String(w.why || 'The double-check was not sure about this one.').slice(0, 200);
   for (const m of (Array.isArray(check.data?.missing) ? check.data.missing : []).slice(0, 10)) result.unclear.push('Possibly missed: ' + String(m).slice(0, 200));
   return json({ ...result, model: first.model, checked_by: check.model || null });

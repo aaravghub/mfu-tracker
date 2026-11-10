@@ -61,9 +61,9 @@
       const text = box.value.trim(); if (!text) return toast('Say or type something first');
       $('#mic') && $('#mic').textContent === 'Pause' && $('#mic').click();
       const btn = $('#areview'); btn.disabled = true; $('#aresult').innerHTML = '<section class="card section-gap"><p class="muted" id="await">Reading it…</p></section>';
-      // The server gives the AI about 10 seconds; the page gives up at 15 so it never spins forever.
+      // The server gives the AI about 20 seconds; the page gives up at 25 so it never spins forever.
       const t0 = Date.now(), tick = setInterval(() => { const el = $('#await'); if (el) el.textContent = `Reading it… ${Math.round((Date.now() - t0) / 1000)}s`; }, 1000);
-      const ask = body => api('assistant', { method: 'POST', body: JSON.stringify(body), signal: AbortSignal.timeout(15000) })
+      const ask = body => api('assistant', { method: 'POST', body: JSON.stringify(body), signal: AbortSignal.timeout(25000) })
         .catch(e => { throw e.name === 'TimeoutError' || e.name === 'AbortError' ? Error('The AI took too long. Try again, or say a bit less at once.') : e; })
         .finally(() => clearInterval(tick));
       if (att) {
