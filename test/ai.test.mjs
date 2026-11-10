@@ -36,3 +36,16 @@ test('attendance keeps real people and statuses, once each', () => {
   assert.equal(r.unclear.length, 2);
   assert.equal(validateAttendance({ rest: 'maybe' }, { students: [], coaches: [] }).rest, null);
 });
+
+import { shortCodes, expandActions } from '../functions/_lib/ai.js';
+test('a whole batch minus one becomes one action per student, with real ids', () => {
+  const student = shortCodes('s', [{ id: 'uuid-a' }, { id: 'uuid-b' }, { id: 'uuid-c' }]);
+  const skill = shortCodes('k', [{ id: 'skill-x' }]), batch = shortCodes('b', [{ id: 'mon' }]);
+  const rosters = new Map([['mon', new Set(['uuid-a', 'uuid-b', 'uuid-c'])]]);
+  const r = expandActions({ actions: [
+    { type: 'skill', batch: 'b1', except: ['s2'], skill: 'k1', status: 'mastered', heard: 'everyone but B' },
+    { type: 'count', students: ['s3'], metric: 'dasrang_1min', value: 30 }
+  ] }, { student, skill, batch, rosters });
+  assert.deepEqual(r.actions.map(a => a.student + ':' + (a.skill || a.metric)), ['uuid-a:skill-x', 'uuid-c:skill-x', 'uuid-c:dasrang_1min']);
+  assert.equal(r.actions[0].batch, undefined);
+});

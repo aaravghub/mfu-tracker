@@ -6,7 +6,7 @@ import { json } from './util.js';
 const OR_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 // shortcut: Groq and Gemini model names are fixed; update them here if those providers rename their free models.
 const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+const GEMINI_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash']; // fastest first
 const STATUSES = new Set(['learning', 'mastered']);
 let orCache = { at: 0, list: [] }, lastGood = '';
 
@@ -24,23 +24,26 @@ async function openRouterFree() {
 
 async function candidates(env) {
   const out = [];
-  if (env.OPENROUTER_API_KEY) for (const m of await openRouterFree()) out.push({ url: 'https://openrouter.ai/api/v1/chat/completions', key: env.OPENROUTER_API_KEY, model: m, name: 'openrouter/' + m });
+  // Fast providers first (answers in a few seconds); OpenRouter's free models are often queued, so they are the backup.
   if (env.GROQ_API_KEY) for (const m of GROQ_MODELS) out.push({ url: 'https://api.groq.com/openai/v1/chat/completions', key: env.GROQ_API_KEY, model: m, name: 'groq/' + m });
   if (env.GEMINI_API_KEY) for (const m of GEMINI_MODELS) out.push({ url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', key: env.GEMINI_API_KEY, model: m, name: 'gemini/' + m });
+  if (env.OPENROUTER_API_KEY) for (const m of await openRouterFree()) out.push({ url: 'https://openrouter.ai/api/v1/chat/completions', key: env.OPENROUTER_API_KEY, model: m, name: 'openrouter/' + m });
   // Start with whichever model answered last time, so a model that ran out is not retried first.
   const i = out.findIndex(c => c.name === lastGood);
   return i > 0 ? [...out.slice(i), ...out.slice(0, i)] : out;
 }
 
-// Tries free models in turn until one answers with JSON. Rate limits, outages and bad JSON all move on to the next.
-export async function askFree(env, messages, skip = '') {
+// Tries free models in turn until one answers with JSON, but never past `deadline` (a coach waits about 10 seconds at most).
+// Rate limits, outages, slow models and bad JSON all move on to the next.
+export async function askFree(env, messages, { skip = '', deadline = Date.now() + 9500 } = {}) {
   const tried = [];
   for (const c of await candidates(env)) {
     if (c.name === skip) continue;
-    if (tried.length >= 8) break;
+    const left = deadline - Date.now();
+    if (left < 1500) break;
     tried.push(c.name);
     try {
-      const r = await fetch(c.url, { method: 'POST', signal: AbortSignal.timeout(25000), headers: { 'content-type': 'application/json', authorization: 'Bearer ' + c.key }, body: JSON.stringify({ model: c.model, messages, temperature: 0 }) });
+      const r = await fetch(c.url, { method: 'POST', signal: AbortSignal.timeout(Math.min(left, 5000)), headers: { 'content-type': 'application/json', authorization: 'Bearer ' + c.key }, body: JSON.stringify({ model: c.model, messages, temperature: 0 }) });
       if (!r.ok) continue;
       const data = extractJson((await r.json())?.choices?.[0]?.message?.content || '');
       if (!data) continue;
@@ -56,6 +59,26 @@ export function extractJson(text) {
   const a = text.indexOf('{'), b = text.lastIndexOf('}');
   if (a < 0 || b <= a) return null;
   try { return JSON.parse(text.slice(a, b + 1)); } catch { return null; }
+}
+
+// Short codes (s1, k1, b1) stand in for long ids in the prompt: smaller prompts and answers, so free models reply in seconds.
+export function shortCodes(prefix, rows) {
+  const to = new Map(), from = new Map();
+  rows.forEach((r, i) => { to.set(r.id, prefix + (i + 1)); from.set(prefix + (i + 1), r.id); });
+  return { to, from };
+}
+
+// Turns the model's codes back into ids and spreads "students": [...] or "batch" + "except" into one action per student.
+export function expandActions(raw, { student, skill, batch, rosters }) {
+  const actions = [];
+  for (const a of Array.isArray(raw?.actions) ? raw.actions.slice(0, 200) : []) {
+    const except = new Set((Array.isArray(a.except) ? a.except : []).map(c => student.from.get(c)));
+    const who = a.batch ? [...(rosters.get(batch.from.get(a.batch)) || [])].filter(id => !except.has(id))
+      : (Array.isArray(a.students) ? a.students : [a.student]).map(c => student.from.get(c) || c);
+    const { students, batch: _b, except: _e, ...rest } = a;
+    for (const id of who) actions.push({ ...rest, student: id, skill: skill.from.get(a.skill) || a.skill });
+  }
+  return { ...raw, actions };
 }
 
 // Keeps only actions that point at real students, skills and metrics with sane values. Everything else becomes a note to the coach.
@@ -93,11 +116,11 @@ Return only JSON: {"rest":"present"|"absent"|null,"marks":[{"kind":"student"|"co
 
 const PROMPT = `You turn a Mallakhamb coach's spoken or typed class notes into actions. The text may come from speech recognition, so names and Mallakhamb terms are often misheard (for example "lower bagli tedhi" for "Ulti Bagli Tedhi", "das rang" for "Dasrang", "sadi adi" for "Sadhi Adhi"). Match every name and term to the closest entry in the lists below by sound and spelling. Never invent students, skills or tests.
 Return only JSON: {"actions":[...],"unclear":[...]}.
-Actions:
-- {"type":"skill","student":"<student id>","skill":"<skill id>","status":"learning"|"mastered","heard":"<the words this came from>"}  (working on, started, practising = learning; got it, mastered, completed, can do = mastered)
-- {"type":"count","student":"<student id>","metric":"<test key>","value":<number>,"heard":"..."}  (e.g. "Riya did 32 dasrang" = dasrang_1min 32; seconds for holds)
-- {"type":"note","student":"<student id>","worked_on":"...","next_steps":"...","heard":"..."}  (only for general comments that are not a skill or a count)
-One action per student per item; "both", "all of them" and pronouns refer to the students just named. If a student name matches several students, or you are unsure, put a short sentence in "unclear" instead of guessing.`;
+Actions (use the short codes from the lists):
+- {"type":"skill","student":"s1","skill":"k1","status":"learning"|"mastered","heard":"<the words this came from>"}  (working on, started, practising = learning; got it, learned, mastered, completed, can do = mastered)
+- {"type":"count","student":"s1","metric":"<test key>","value":<number>,"heard":"..."}  (e.g. "Riya did 32 dasrang" = dasrang_1min 32; seconds for holds)
+- {"type":"note","student":"s1","worked_on":"...","next_steps":"...","heard":"..."}  (only for general comments that are not a skill or a count)
+For several students, use "students":["s1","s2"] instead of "student". For a whole batch use "batch":"b1" and list anyone left out in "except":["s5"]; do not list the batch's students yourself. "Both", "all of them" and pronouns refer to the students just named. If a student name matches several students, or you are unsure, put a short sentence in "unclear" instead of guessing.`;
 
 const CHECK = `You double-check an assistant. Given a coach's words and the actions it proposed, list the actions the words do not clearly support (wrong student, wrong skill, wrong number, wrong status) and anything the coach clearly asked for that is missing. Return only JSON: {"wrong":[{"index":<number>,"why":"..."}],"missing":["..."]}.`;
 
@@ -109,20 +132,27 @@ export async function handleAssistant(path, method, request, env) {
   if (!text) return json({ error: 'Say or type something first.' }, 400);
   if (body.mode === 'attendance') return attendanceFromWords(env, text, body);
   const metrics = (Array.isArray(body.metrics) ? body.metrics : []).filter(m => Array.isArray(m) && /^[a-z0-9_]{1,40}$/.test(m[0])).slice(0, 60);
-  const [students, skills] = (await env.DB.batch([
+  const deadline = Date.now() + 9500;
+  const [students, skills, batches, members] = (await env.DB.batch([
     env.DB.prepare('SELECT id,first_name,last_name FROM students WHERE COALESCE(active,1)=1'),
-    env.DB.prepare('SELECT id,apparatus,level,name,COALESCE(general,0) AS general FROM skills WHERE COALESCE(active,1)=1')
+    env.DB.prepare('SELECT id,apparatus,level,name,COALESCE(general,0) AS general FROM skills WHERE COALESCE(active,1)=1'),
+    env.DB.prepare('SELECT id,name,days FROM batches WHERE COALESCE(active,1)=1'),
+    env.DB.prepare('SELECT batch_id,student_id FROM batch_students')
   ])).map(r => r.results);
-  const lists = `Students (id|name):\n${students.map(s => s.id + '|' + s.first_name + ' ' + (s.last_name || '')).join('\n')}\n\nSkills (id|apparatus level|name):\n${skills.map(s => s.id + '|' + s.apparatus + ' ' + (s.general ? 'general' : 'L' + s.level) + '|' + s.name).join('\n')}\n\nTests (key|name):\n${metrics.map(m => m[0] + '|' + String(m[1]).slice(0, 60)).join('\n')}`;
+  const st = shortCodes('s', students), kc = shortCodes('k', skills), bc = shortCodes('b', batches);
+  const rosters = new Map(batches.map(b => [b.id, new Set()]));
+  for (const m of members) if (st.to.has(m.student_id)) rosters.get(m.batch_id)?.add(m.student_id);
+  const lists = `Students (code|name):\n${students.map(s => st.to.get(s.id) + '|' + s.first_name + ' ' + (s.last_name || '')).join('\n')}\n\nBatches (code|name|days):\n${batches.map(b => bc.to.get(b.id) + '|' + b.name + '|' + (b.days || '')).join('\n')}\n\nSkills (code|apparatus level|name):\n${skills.map(s => kc.to.get(s.id) + '|' + s.apparatus + ' ' + (s.general ? 'general' : 'L' + s.level) + '|' + s.name).join('\n')}\n\nTests (key|name):\n${metrics.map(m => m[0] + '|' + String(m[1]).slice(0, 60)).join('\n')}`;
 
-  const first = await askFree(env, [{ role: 'system', content: PROMPT + '\n\n' + lists }, { role: 'user', content: text }]);
-  if (!first.data) return json({ error: 'Every free AI model is busy or out of free use right now. Try again in a minute.', tried: first.tried }, 503);
-  const result = validate(first.data, { students, skills, metrics: metrics.map(m => m[0]) });
+  const first = await askFree(env, [{ role: 'system', content: PROMPT + '\n\n' + lists }, { role: 'user', content: text }], { deadline });
+  if (!first.data) return json({ error: 'The free AI models are busy right now. Try again in a minute, or keep it shorter.', tried: first.tried }, 503);
+  const result = validate(expandActions(first.data, { student: st, skill: kc, batch: bc, rosters }), { students, skills, metrics: metrics.map(m => m[0]) });
 
   // Second look, preferably by a different free model: flag actions the words do not support.
   const names = new Map(students.map(s => [s.id, s.first_name + ' ' + (s.last_name || '')])), sk = new Map(skills.map(s => [s.id, s.name]));
   const listed = result.actions.map((a, i) => `${i}: ${names.get(a.student)} ${a.type === 'skill' ? a.status + ' ' + sk.get(a.skill) : a.type === 'count' ? a.metric + ' = ' + a.value : 'note: ' + a.worked_on + ' ' + a.next_steps}`).join('\n');
-  const check = result.actions.length ? await askFree(env, [{ role: 'system', content: CHECK }, { role: 'user', content: `Coach said:\n${text}\n\nProposed actions:\n${listed}` }], first.model) : { data: null };
+  // Only when there is time left; the coach still reviews every item either way.
+  const check = result.actions.length && deadline - Date.now() > 3000 ? await askFree(env, [{ role: 'system', content: CHECK }, { role: 'user', content: `Coach said:\n${text}\n\nProposed actions:\n${listed}` }], { skip: first.model, deadline }) : { data: null };
   const flags = new Map((Array.isArray(check.data?.wrong) ? check.data.wrong : []).filter(w => Number.isInteger(w?.index)).map(w => [w.index, String(w.why || '').slice(0, 200)]));
   result.actions.forEach((a, i) => { if (flags.has(i)) a.doubt = flags.get(i) || 'The double-check was not sure about this one.'; });
   for (const m of (Array.isArray(check.data?.missing) ? check.data.missing : []).slice(0, 10)) result.unclear.push('Possibly missed: ' + String(m).slice(0, 200));
@@ -137,15 +167,18 @@ async function attendanceFromWords(env, text, body) {
     env.DB.prepare('SELECT id,first_name,last_name FROM students WHERE COALESCE(active,1)=1'),
     env.DB.prepare('SELECT id,name FROM coaches WHERE COALESCE(active,1)=1')
   ])).map(r => r.results);
+  const deadline = Date.now() + 9500;
   const onRoster = new Set(roster.map(r => r.id)), onCrew = new Set(crew.map(r => r.id));
   const name = s => s.first_name + ' ' + (s.last_name || '');
-  const lists = `Roster students (id|name):\n${students.filter(s => onRoster.has(s.id)).map(s => s.id + '|' + name(s)).join('\n')}\n\nBatch coaches (id|name):\n${coaches.filter(c => onCrew.has(c.id)).map(c => c.id + '|' + c.name).join('\n')}\n\nOther students who may drop in (id|name):\n${students.filter(s => !onRoster.has(s.id)).map(s => s.id + '|' + name(s)).join('\n')}\n\nOther coaches (id|name):\n${coaches.filter(c => !onCrew.has(c.id)).map(c => c.id + '|' + c.name).join('\n')}`;
-  const first = await askFree(env, [{ role: 'system', content: ATT_PROMPT + '\n\n' + lists }, { role: 'user', content: text }]);
-  if (!first.data) return json({ error: 'Every free AI model is busy or out of free use right now. Try again in a minute.', tried: first.tried }, 503);
+  const st = shortCodes('s', students), cc = shortCodes('c', coaches);
+  const lists = `Roster students (id|name):\n${students.filter(s => onRoster.has(s.id)).map(s => st.to.get(s.id) + '|' + name(s)).join('\n')}\n\nBatch coaches (id|name):\n${coaches.filter(c => onCrew.has(c.id)).map(c => cc.to.get(c.id) + '|' + c.name).join('\n')}\n\nOther students who may drop in (id|name):\n${students.filter(s => !onRoster.has(s.id)).map(s => st.to.get(s.id) + '|' + name(s)).join('\n')}\n\nOther coaches (id|name):\n${coaches.filter(c => !onCrew.has(c.id)).map(c => cc.to.get(c.id) + '|' + c.name).join('\n')}`;
+  const first = await askFree(env, [{ role: 'system', content: ATT_PROMPT + '\n\n' + lists }, { role: 'user', content: text }], { deadline });
+  if (!first.data) return json({ error: 'The free AI models are busy right now. Try again in a minute.', tried: first.tried }, 503);
+  for (const m of Array.isArray(first.data.marks) ? first.data.marks : []) m.id = (m.kind === 'coach' ? cc : st).from.get(m.id) || m.id;
   const result = validateAttendance(first.data, { students, coaches });
   const who = new Map([...students.map(s => ['student' + s.id, name(s)]), ...coaches.map(c => ['coach' + c.id, c.name])]);
   const listed = [result.rest ? `everyone else on the roster: ${result.rest}` : null, ...result.marks.map((m, i) => `${i}: ${who.get(m.kind + m.id)} ${m.status}`)].filter(Boolean).join('\n');
-  const check = result.marks.length ? await askFree(env, [{ role: 'system', content: CHECK }, { role: 'user', content: `Coach said:\n${text}\n\nProposed attendance:\n${listed}` }], first.model) : { data: null };
+  const check = result.marks.length && deadline - Date.now() > 3000 ? await askFree(env, [{ role: 'system', content: CHECK }, { role: 'user', content: `Coach said:\n${text}\n\nProposed attendance:\n${listed}` }], { skip: first.model, deadline }) : { data: null };
   for (const w of Array.isArray(check.data?.wrong) ? check.data.wrong : []) if (result.marks[w?.index]) result.marks[w.index].doubt = String(w.why || 'The double-check was not sure about this one.').slice(0, 200);
   for (const m of (Array.isArray(check.data?.missing) ? check.data.missing : []).slice(0, 10)) result.unclear.push('Possibly missed: ' + String(m).slice(0, 200));
   return json({ ...result, model: first.model, checked_by: check.model || null });

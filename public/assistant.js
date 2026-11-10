@@ -60,15 +60,20 @@
     $('#areview').onclick = async () => {
       const text = box.value.trim(); if (!text) return toast('Say or type something first');
       $('#mic') && $('#mic').textContent === 'Pause' && $('#mic').click();
-      const btn = $('#areview'); btn.disabled = true; $('#aresult').innerHTML = '<section class="card section-gap"><p class="muted">Reading it and double-checking…</p></section>';
+      const btn = $('#areview'); btn.disabled = true; $('#aresult').innerHTML = '<section class="card section-gap"><p class="muted" id="await">Reading it…</p></section>';
+      // The server gives the AI about 10 seconds; the page gives up at 15 so it never spins forever.
+      const t0 = Date.now(), tick = setInterval(() => { const el = $('#await'); if (el) el.textContent = `Reading it… ${Math.round((Date.now() - t0) / 1000)}s`; }, 1000);
+      const ask = body => api('assistant', { method: 'POST', body: JSON.stringify(body), signal: AbortSignal.timeout(15000) })
+        .catch(e => { throw e.name === 'TimeoutError' || e.name === 'AbortError' ? Error('The AI took too long. Try again, or say a bit less at once.') : e; })
+        .finally(() => clearInterval(tick));
       if (att) {
-        try { await reviewAttendance(await api('assistant', { method: 'POST', body: JSON.stringify({ mode: 'attendance', text, batch_id: A.batch }) })); }
+        try { await reviewAttendance(await ask({ mode: 'attendance', text, batch_id: A.batch })); }
         catch (e) { $('#aresult').innerHTML = `<section class="card section-gap"><p class="error">${esc(e.message)}</p><p class="muted">You can still take attendance on the Attendance page.</p></section>`; }
         finally { btn.disabled = false; }
         return;
       }
       let r;
-      try { r = await api('assistant', { method: 'POST', body: JSON.stringify({ text, metrics }) }); }
+      try { r = await ask({ text, metrics }); }
       catch (e) {
         // No AI key yet or every free model busy: fall back to the keyword matcher (skills only).
         const { changes, notes } = window.MFU_parsePlain(text, students, skills);
