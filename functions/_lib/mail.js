@@ -25,6 +25,8 @@ async function gmailAccessToken(env) {
     })
   });
   const data = await res.json().catch(() => ({}));
+  // invalid_grant: the saved Google sign-in expired (Testing-mode projects expire it every 7 days) or was revoked.
+  if (data.error === 'invalid_grant') throw new Error('The Google connection has expired. As admin, open /api/auth/google/start, approve, and put the new token in Cloudflare as GMAIL_REFRESH_TOKEN. To stop this every week, set the Google project to "In production".');
   if (!res.ok || !data.access_token) throw new Error(data.error_description || data.error || 'Could not refresh Gmail access.');
   return data.access_token;
 }
