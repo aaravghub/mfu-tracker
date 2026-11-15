@@ -223,7 +223,7 @@ export async function handleFeatures(path, method, request, env, url, actor) {
       const ids = (await all(env, 'SELECT student_id FROM demo_students WHERE demo_id=?', id)).map(r => r.student_id);
       const people = [...await recipientsFor(env, { type: 'students', student_ids: ids }), ...(ids.length ? await all(env, `SELECT first_name AS name,email FROM students WHERE email IS NOT NULL AND id IN (${marks(ids)})`, ...ids) : [])];
       const r = await notify(env, people, title + ' — ' + when, [title + ': ' + when + '.', where && 'Where: ' + where, notes].filter(Boolean), `<p style="margin:18px 0 0;font-size:14px">See it in <a href="${esc(siteUrl(env, request))}">MFU Tracker</a>.</p>`);
-      return json({ ok: true, emailed: r.sent || 0, skipped: !!r.skipped });
+      return json({ ok: true, emailed: r.sent || 0, skipped: !!r.skipped, message: title + '\n' + text });
     }
     if (method === 'GET' && !id) {
       const [demos, kids] = await env.DB.batch([
