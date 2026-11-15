@@ -14,6 +14,7 @@ async function who(request, env) {
   if (!s) return null;
   if (s.role === 'admin') return { role: 'admin', key: 'admin', name: 'MFU Admin' };
   if (s.role === 'coach' && s.coach_id) { const c = await env.DB.prepare('SELECT id,name FROM coaches WHERE id=? AND COALESCE(active,1)=1').bind(s.coach_id).first(); return c && { role: 'coach', id: c.id, key: 'coach:' + c.id, name: c.name }; }
+  if (s.role === 'student' && s.student_id) { const st = await env.DB.prepare('SELECT id,first_name,last_name FROM students WHERE id=? AND COALESCE(active,1)=1').bind(s.student_id).first(); return st && { role: 'student', id: st.id, key: 'student:' + st.id, name: st.first_name + ' ' + (st.last_name || '') }; }
   if (s.role === 'parent' && s.parent_id) { const p = await env.DB.prepare('SELECT id,name,email FROM parents WHERE id=? AND COALESCE(active,1)=1').bind(s.parent_id).first(); return p && { role: 'parent', id: p.id, key: 'parent:' + p.id, name: p.name || p.email }; }
   return null;
 }
@@ -27,7 +28,9 @@ async function chatsFor(env, me) {
     coach: [`SELECT 'batch:'||b.id AS chat,b.name AS title,'batch' AS kind FROM batch_coaches bc JOIN batches b ON b.id=bc.batch_id WHERE bc.coach_id=?1 AND COALESCE(b.active,1)=1`,
       `SELECT 'demo:'||id AS chat,title,'demo' AS kind,demo_date AS date FROM demos WHERE demo_date>=${recent}`],
     parent: [`SELECT DISTINCT 'batch:'||b.id AS chat,b.name AS title,'batch' AS kind FROM parent_students ps JOIN batch_students bs ON bs.student_id=ps.student_id JOIN batches b ON b.id=bs.batch_id WHERE ps.parent_id=?1 AND COALESCE(b.active,1)=1`,
-      `SELECT DISTINCT 'demo:'||d.id AS chat,d.title,'demo' AS kind,d.demo_date AS date FROM parent_students ps JOIN demo_students ds ON ds.student_id=ps.student_id JOIN demos d ON d.id=ds.demo_id WHERE ps.parent_id=?1 AND d.demo_date>=${recent}`]
+      `SELECT DISTINCT 'demo:'||d.id AS chat,d.title,'demo' AS kind,d.demo_date AS date FROM parent_students ps JOIN demo_students ds ON ds.student_id=ps.student_id JOIN demos d ON d.id=ds.demo_id WHERE ps.parent_id=?1 AND d.demo_date>=${recent}`],
+    student: [`SELECT 'batch:'||b.id AS chat,b.name AS title,'batch' AS kind FROM batch_students bs JOIN batches b ON b.id=bs.batch_id WHERE bs.student_id=?1 AND COALESCE(b.active,1)=1`,
+      `SELECT 'demo:'||d.id AS chat,d.title,'demo' AS kind,d.demo_date AS date FROM demo_students ds JOIN demos d ON d.id=ds.demo_id WHERE ds.student_id=?1 AND d.demo_date>=${recent}`]
   }[me.role];
   const rows = (await env.DB.batch(q.map(sql => me.id ? env.DB.prepare(sql).bind(me.id) : env.DB.prepare(sql)))).flatMap(r => r.results);
   if (!rows.length) return [];

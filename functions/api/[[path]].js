@@ -16,6 +16,7 @@ import { handleVideo } from '../_lib/video.js';
 import { handleChat, handleChatMessage } from '../_lib/chat.js';
 import { handlePyramids, handleLineup } from '../_lib/pyramids.js';
 import { handleSignin } from '../_lib/signin.js';
+import { handleStudent, handleStudentRequests } from '../_lib/student.js';
 // Coaches can do everything the admin can except manage coach and parent accounts.
 const adminOnly = (path, method) => { const [root] = path.split('/'); return root === 'coach-accounts' || root === 'signups' || (root === 'parents' && method !== 'GET') || (root === 'coaches' && method !== 'GET'); };
 // One random code per database, made on first use.
@@ -64,12 +65,13 @@ export async function onRequest({request,env,params}){
  }
  if(path==='login'&&method==='POST'){if(!env.ADMIN_PASSWORD)return json({error:'ADMIN_PASSWORD secret is not configured.'},500);const key='admin:'+clientKey(request);if(await isBlocked(env,key))return json({error:'Too many attempts. Please wait 15 minutes and try again.'},429);const body=await request.json().catch(()=>({}));if(typeof body.password!=='string'||!(await secretsMatch(body.password,env.ADMIN_PASSWORD))){await recordFail(env,key);return json({error:'Incorrect password.'},401)}await clearFails(env,key);return json({ok:true,role:'admin'},200,{'set-cookie':await startSession(env,'admin',43200)})}
  if(path==='logout'&&method==='POST'){await endSession(request,env);return json({ok:true},200,{'set-cookie':'mfu_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0'})}
- if(path==='me'&&method==='GET'){const s=await session(request,env);if(!s)return json({authenticated:false});if(s.role==='parent'){const p=s.parent_id?await env.DB.prepare('SELECT name,email,tour_done FROM parents WHERE id=? AND COALESCE(active,1)=1').bind(s.parent_id).first():null;return p?json({authenticated:true,role:'parent',name:p.name,email:p.email,tour_done:!!p.tour_done}):json({authenticated:false})}if(s.role==='coach'){const c=s.coach_id?await env.DB.prepare('SELECT id,name,email,tour_done FROM coaches WHERE id=? AND COALESCE(active,1)=1 AND (password_hash IS NOT NULL OR invited_at IS NOT NULL)').bind(s.coach_id).first():null;return c?json({authenticated:true,role:'coach',name:c.name,email:c.email,coach_id:c.id,tour_done:!!c.tour_done}):json({authenticated:false})}return json({authenticated:true,role:s.role})}
+ if(path==='me'&&method==='GET'){const s=await session(request,env);if(!s)return json({authenticated:false});if(s.role==='student'){const st=s.student_id?await env.DB.prepare('SELECT first_name,last_name,email,tour_done FROM students WHERE id=? AND COALESCE(active,1)=1').bind(s.student_id).first():null;return st?json({authenticated:true,role:'student',name:st.first_name+' '+(st.last_name||''),email:st.email,tour_done:!!st.tour_done}):json({authenticated:false})}if(s.role==='parent'){const p=s.parent_id?await env.DB.prepare('SELECT name,email,tour_done FROM parents WHERE id=? AND COALESCE(active,1)=1').bind(s.parent_id).first():null;return p?json({authenticated:true,role:'parent',name:p.name,email:p.email,tour_done:!!p.tour_done}):json({authenticated:false})}if(s.role==='coach'){const c=s.coach_id?await env.DB.prepare('SELECT id,name,email,tour_done FROM coaches WHERE id=? AND COALESCE(active,1)=1 AND (password_hash IS NOT NULL OR invited_at IS NOT NULL)').bind(s.coach_id).first():null;return c?json({authenticated:true,role:'coach',name:c.name,email:c.email,coach_id:c.id,tour_done:!!c.tour_done}):json({authenticated:false})}return json({authenticated:true,role:s.role})}
  // Photos: any signed-in person (admin, coach or parent) can view; keys are unguessable.
  if(path.startsWith('photo/')&&method==='GET'){const s=await session(request,env);if(!s)return json({error:'Please sign in.'},401);return servePhoto(path,request,env)}
  // Chats and polls: admins, coaches and parents, each limited to their own batches and demos.
  { const c=await handleChat(path,method,request,env)||await handleChatMessage(path,method,request,env);if(c)return c }
  if(path.startsWith('signin/'))return handleSignin(path,method,request,env);
+ if(path.startsWith('student/'))return handleStudent(path,method,request,env);
  if(path.startsWith('parent/'))return handleParent(path,method,request,env);
  if(path.startsWith('coach/'))return handleCoachAuth(path,method,request,env);
  if(path.startsWith('signup/'))return handleSignup(path,method,request,env);
@@ -83,6 +85,7 @@ export async function onRequest({request,env,params}){
  if(path==='coach-accounts'||path.startsWith('coach-accounts/'))return handleCoachAccounts(path,method,request,env);
  if(path==='signups'||path.startsWith('signups/'))return handleSignupReview(path,method,request,env,actor);
  { const v=await handleVideo(path,method,request,env,actor);if(v)return v }
+ { const sr=await handleStudentRequests(path,method,request,env);if(sr)return sr }
  { const py=await handlePyramids(path,method,request,env,url,actor)||await handleLineup(path,method,request,env,url,actor);if(py)return py }
  if(path==='photo'&&method==='POST')return savePhoto(env,url.searchParams.get('kind'),url.searchParams.get('id'),request,actor.name);
  if(path==='metric-photos'&&method==='GET')return json((await env.DB.prepare('SELECT metric,image_url FROM metric_photos').all()).results);

@@ -118,7 +118,7 @@ function setupView(token, who = 'parent') {
     catch (err) { $('#login-error').textContent = err.message; }
   };
 }
-const startPage = role => ({ parent: 'home', coach: 'coach_home' }[role] || 'overview');
+const startPage = role => ({ parent: 'home', student: 'home', coach: 'coach_home' }[role] || 'overview');
 async function enter() {
   const me = await api('me');
   if (!me.authenticated) return loginView();
@@ -351,7 +351,7 @@ PAGES.email = async () => {
 };
 
 /* ---------- PARENT portal ---------- */
-async function loadHome() { return (state.home = await api('parent/home')); }
+async function loadHome() { return (state.home = await api(state.role === 'student' ? 'student/home' : 'parent/home')); }
 const pips = n => '<span class="pips">' + [1, 2, 3, 4, 5].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('') + '</span>';
 const STATUS_LABEL = { not_started: 'Not started', learning: 'Learning', mastered: 'Completed' };
 
@@ -380,8 +380,8 @@ function childCard(c) {
 PAGES.home = async () => {
   const d = await loadHome();
   const next = d.events;
-  $('#content').innerHTML = hero('Hello' + (d.parent.name ? ', ' + esc(d.parent.name.split(/\s+/)[0]) : ''), 'Here is how your ' + (d.children.length > 1 ? 'children are' : 'child is') + ' doing.') +
-    (next.length ? `<div class="card next-up"><h3>Coming up</h3>${next.map(e => `<div class="mini-event"><div class="date-chip"><b>${dateObj(e.event_date).getDate()}</b><span>${dateObj(e.event_date).toLocaleDateString('en-US', { month: 'short' })}</span></div><div><b>${esc(e.title)}</b><small>${typeLabel(e.event_type)}${e.going ? ' · your child is in it' : ''} · ${esc(fmtTime(e.event_time) || fmtShort(e.event_date))}</small></div>${e.signup_url ? link(e.signup_url, 'Sign up', 'btn small') : `<span class="chip">${countdown(e.event_date)}</span>`}</div>`).join('')}<button class="btn secondary small" data-go="p_events">See all events</button></div>` : '') +
+  $('#content').innerHTML = hero('Hello' + (d.parent.name ? ', ' + esc(d.parent.name.split(/\s+/)[0]) : ''), (state.role === 'student' ? 'Your skills, classes, demos and notes from your coaches.' : 'Here is how your ' + (d.children.length > 1 ? 'children are' : 'child is') + ' doing.')) +
+    (next.length ? `<div class="card next-up"><h3>Coming up</h3>${next.map(e => `<div class="mini-event"><div class="date-chip"><b>${dateObj(e.event_date).getDate()}</b><span>${dateObj(e.event_date).toLocaleDateString('en-US', { month: 'short' })}</span></div><div><b>${esc(e.title)}</b><small>${typeLabel(e.event_type)}${e.going ? (state.role === 'student' ? ' · you are in it' : ' · your child is in it') : ''} · ${esc(fmtTime(e.event_time) || fmtShort(e.event_date))}</small></div>${e.signup_url ? link(e.signup_url, 'Sign up', 'btn small') : `<span class="chip">${countdown(e.event_date)}</span>`}</div>`).join('')}<button class="btn secondary small" data-go="p_events">See all events</button></div>` : '') +
     (d.children.length ? d.children.map(childCard).join('') : `<div class="card">${empty('👋', 'No children linked yet', 'Ask your coach to link your child to this account.')}</div>`);
   $$('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go));
 };

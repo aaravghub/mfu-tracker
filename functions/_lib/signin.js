@@ -6,7 +6,7 @@ import { sendMessages, wrap } from './mail.js';
 // Either way the account must already exist (MFU creates parent and coach accounts; new families use Sign up).
 // Someone who signs in this way and has no password is asked to set one, so the same email also works with a password.
 
-const SESSION = { parent: 7 * 24 * 3600, coach: 7 * 24 * 3600, admin: 43200 };
+const SESSION = { parent: 7 * 24 * 3600, coach: 7 * 24 * 3600, student: 7 * 24 * 3600, admin: 43200 };
 const CODE_SECONDS = 600, CODE_TRIES = 5;
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -14,6 +14,7 @@ const now = () => Math.floor(Date.now() / 1000);
 async function account(env, role, email) {
   if (role === 'parent') return env.DB.prepare('SELECT id,name,(password_hash IS NOT NULL) AS has_password FROM parents WHERE email=? AND COALESCE(active,1)=1').bind(email).first();
   if (role === 'coach') return env.DB.prepare('SELECT id,name,(password_hash IS NOT NULL) AS has_password FROM coaches WHERE lower(email)=? AND COALESCE(active,1)=1 AND (password_hash IS NOT NULL OR invited_at IS NOT NULL) ORDER BY (password_hash IS NULL) LIMIT 1').bind(email).first();
+  if (role === 'student') return env.DB.prepare('SELECT id,first_name AS name,(password_hash IS NOT NULL) AS has_password FROM students WHERE lower(email)=? AND COALESCE(active,1)=1').bind(email).first();
   if (role === 'admin') return email === cleanEmail(env.ADMIN_EMAIL || 'automallakhamb@gmail.com') ? { id: null, name: 'Admin', has_password: 1 } : null;
   return null;
 }
@@ -21,7 +22,8 @@ async function account(env, role, email) {
 async function signIn(env, role, acc) {
   if (role === 'parent') await env.DB.prepare("UPDATE parents SET last_login=datetime('now') WHERE id=?").bind(acc.id).run();
   if (role === 'coach') await env.DB.prepare("UPDATE coaches SET last_login=datetime('now') WHERE id=?").bind(acc.id).run();
-  const cookie = await startSession(env, role, SESSION[role], role === 'parent' ? acc.id : null, role === 'coach' ? acc.id : null);
+  if (role === 'student') await env.DB.prepare("UPDATE students SET last_login=datetime('now') WHERE id=?").bind(acc.id).run();
+  const cookie = await startSession(env, role, SESSION[role], role === 'parent' ? acc.id : null, role === 'coach' ? acc.id : null, role === 'student' ? acc.id : null);
   return json({ ok: true, role, needs_password: !acc.has_password }, 200, { 'set-cookie': cookie });
 }
 
@@ -44,7 +46,7 @@ export async function verifyGoogleToken(token, clientId, fetchKeys = () => fetch
 export async function handleSignin(path, method, request, env) {
   if (!path.startsWith('signin/')) return null;
   const sub = path.slice('signin/'.length), body = method === 'POST' ? await request.json().catch(() => ({})) : {};
-  const role = ['parent', 'coach', 'admin'].includes(body.role) ? body.role : 'parent';
+  const role = ['parent', 'coach', 'student', 'admin'].includes(body.role) ? body.role : 'parent';
 
   // The public Google client id, for the sign-in button.
   if (sub === 'config' && method === 'GET') return json({ google_client_id: env.GOOGLE_CLIENT_ID || null });
@@ -86,7 +88,7 @@ export async function handleSignin(path, method, request, env) {
   // Set a password after signing in with a code or Google (only when the account has none yet).
   if (sub === 'password' && method === 'POST') {
     const s = await getSession(request, env);
-    const table = s?.role === 'parent' ? 'parents' : s?.role === 'coach' ? 'coaches' : null, id = s?.parent_id || s?.coach_id;
+    const table = { parent: 'parents', coach: 'coaches', student: 'students' }[s?.role], id = s?.parent_id || s?.coach_id || s?.student_id;
     if (!table || !id) return json({ error: 'Please sign in.' }, 401);
     const row = await env.DB.prepare(`SELECT email,(password_hash IS NOT NULL) AS has FROM ${table} WHERE id=?`).bind(id).first();
     if (!row || row.has) return json({ error: 'You already have a password. Change it from Account.' }, 400);

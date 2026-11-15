@@ -41,7 +41,7 @@ const byName = (a, b) => (a.first_name + ' ' + a.last_name).localeCompare(b.firs
 
 export async function handleAttendance(path, method, request, env, url, body) {
   const [root] = path.split('/');
-  if (!['attendance', 'attendance-center', 'attendance-student', 'attendance-report', 'attendance-coaches'].includes(root)) return null;
+  if (!['attendance', 'attendance-center', 'attendance-student', 'attendance-report', 'attendance-coaches', 'attendance-history'].includes(root)) return null;
   const q = k => url.searchParams.get(k);
 
   // ---- one batch, one date ----
@@ -64,6 +64,22 @@ export async function handleAttendance(path, method, request, env, url, body) {
       if (st.length) await env.DB.batch(st);
       return json({ ok: true, saved: body.records.length, coaches: (body.coaches || []).length });
     } catch (e) { return json({ error: String(e.message || 'Could not save attendance.') }, 400); }
+  }
+
+  // ---- one batch, one month: every class date and every mark, for the Batch history grid ----
+  if (root === 'attendance-history' && method === 'GET') {
+    const bid = q('batch_id'), m = q('month');
+    if (!bid || !MONTH_RE.test(m || '')) return json({ error: 'batch_id and a month are required' }, 400);
+    const [roster, marks] = await env.DB.batch([
+      env.DB.prepare("SELECT s.id,s.first_name,s.last_name FROM batch_students bs JOIN students s ON s.id=bs.student_id WHERE bs.batch_id=? AND COALESCE(s.active,1)=1").bind(bid),
+      env.DB.prepare("SELECT sa.student_id,sa.attendance_date AS d,sa.status,s.first_name,s.last_name FROM student_attendance sa JOIN students s ON s.id=sa.student_id WHERE sa.batch_id=? AND sa.attendance_date>=? AND sa.attendance_date<?").bind(bid, m + '-01', nextMonth(m) + '-01')
+    ]);
+    const people = new Map(roster.results.map(s => [s.id, { id: s.id, first_name: s.first_name, last_name: s.last_name, drop_in: false, marks: {} }]));
+    for (const r of marks.results) {
+      if (!people.has(r.student_id)) people.set(r.student_id, { id: r.student_id, first_name: r.first_name, last_name: r.last_name, drop_in: true, marks: {} });
+      people.get(r.student_id).marks[r.d] = r.status;
+    }
+    return json({ dates: [...new Set(marks.results.map(r => r.d))].sort(), students: [...people.values()].sort(byName) });
   }
 
   // ---- every coach's marks for one month, for the Coaches page ----

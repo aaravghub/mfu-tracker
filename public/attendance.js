@@ -85,8 +85,8 @@
     const people = students.filter(s => s.active !== 0);
     const S = state.att ||= { mode: 'center', center: (() => { try { const c = localStorage.getItem('mfu-att-center'); if (c && centers.some(x => x.id === c)) return c; } catch { /* ignore */ } return batches.find(b => b.center_id)?.center_id || centers[0]?.id || ''; })(), batch: '', date: todayStr(), month: todayStr().slice(0, 7), rcenter: '', sort: 'name', q: '' };
     $('#content').innerHTML = hero('Attendance', 'Take attendance for a whole center or one batch, add drop-ins, and see who has been showing up.') +
-      '<div class="seg att-modes" id="amodes"><button type="button" data-m="center">By center</button><button type="button" data-m="batch">By batch</button><button type="button" data-m="report">Monthly report</button></div><div id="aview"></div>';
-    const setMode = m => { S.mode = m; $$('#amodes button').forEach(b => b.classList.toggle('active', b.dataset.m === m)); ({ center: centerView, batch: batchView, report: reportView })[m](); };
+      '<div class="seg att-modes" id="amodes"><button type="button" data-m="center">By center</button><button type="button" data-m="batch">By batch</button><button type="button" data-m="report">Monthly report</button><button type="button" data-m="history">Batch history</button></div><div id="aview"></div>';
+    const setMode = m => { S.mode = m; $$('#amodes button').forEach(b => b.classList.toggle('active', b.dataset.m === m)); ({ center: centerView, batch: batchView, report: reportView, history: historyView })[m](); };
     $$('#amodes button').forEach(b => b.onclick = () => setMode(b.dataset.m));
 
     // Center mode shows batch names first. Each batch has its own roster and submit button.
@@ -137,6 +137,27 @@
     }
     const centerView = () => takeView('center');
     const batchView = () => takeView('batch');
+
+    // A batch's month at a glance: kids down the side, class dates across, each mark in colour, and each kid's total.
+    function historyView() {
+      S.hbatch ||= batches[0]?.id || '';
+      $('#aview').innerHTML = `<div class="card att-bar">${monthNav(S.month, 'hmn')}<label>Batch<select id="hbatch">${batches.map(b => `<option value="${esc(b.id)}" ${b.id === S.hbatch ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label></div><div id="hbody"><p class="muted">Loading…</p></div>`;
+      const load = async () => {
+        if (!S.hbatch) { $('#hbody').innerHTML = empty('', 'No batches', 'Add a batch first.'); return; }
+        const d = await api(`attendance-history?batch_id=${encodeURIComponent(S.hbatch)}&month=${S.month}`);
+        const day = ds => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+        const L = { present: 'P', late: 'L', absent: 'A', excused: 'E' };
+        $('#hbody').innerHTML = !d.dates.length ? `<div class="card">${empty('', 'No attendance this month', 'Pick another month, or take attendance for this batch.')}</div>`
+          : `<div class="card"><div class="hist-wrap"><table class="hist"><thead><tr><th>Student</th>${d.dates.map(x => `<th>${esc(day(x))}</th>`).join('')}<th>Came</th></tr></thead><tbody>${d.students.map(s => {
+              const came = d.dates.filter(x => here(s.marks[x])).length;
+              return `<tr><td><button type="button" class="link-btn" data-sid="${esc(s.id)}">${esc(s.first_name + ' ' + s.last_name)}</button>${s.drop_in ? ' <span class="chip drop">Drop-in</span>' : ''}</td>${d.dates.map(x => `<td class="hc ${s.marks[x] ? 'h-' + s.marks[x] : ''}" title="${esc(s.marks[x] || 'not marked')}">${L[s.marks[x]] || '·'}</td>`).join('')}<td class="num"><b>${came}</b>/${d.dates.length}</td></tr>`;
+            }).join('')}</tbody></table></div><p class="muted section-gap-sm">P present · L late · A absent · E excused · · not marked. Tap a name for that student's full history.</p></div>`;
+        $$('#hbody [data-sid]').forEach(b => b.onclick = () => studentAttendanceModal(people.find(x => x.id === b.dataset.sid) || { id: b.dataset.sid, first_name: b.textContent, last_name: '' }));
+      };
+      $('#hbatch').onchange = e => { S.hbatch = e.target.value; load(); };
+      $$('#hmn [data-mv]').forEach(b => b.onclick = () => { S.month = shiftMonth(S.month, +b.dataset.mv); historyView(); });
+      load();
+    }
 
     function reportView() {
       $('#aview').innerHTML = `<div class="card att-bar">${monthNav(S.month)}<label>Center<select id="rcenter"><option value="">All centers</option>${centers.map(c => `<option value="${esc(c.id)}" ${c.id === S.rcenter ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label><label>Sort<select id="rsort"><option value="name">Name</option><option value="most">Most attended</option><option value="least">Least attended</option></select></label><label>Search<input id="rq" placeholder="Student name…" value="${esc(S.q)}"></label></div><div id="rbody"><p class="muted">Loading…</p></div>`;

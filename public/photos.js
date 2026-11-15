@@ -125,7 +125,7 @@
     const a = e.target.closest('[data-kid-photo]'); if (!a) return;
     const kid = state.home?.children?.find(k => k.id === a.dataset.kidPhoto); if (!kid) return;
     const m = openModal(kid.first_name + '’s photo', '<p class="muted">Take or choose a clear photo of your child. It is shrunk before upload and only MFU coaches and your family see it.</p><div id="kphoto"></div>');
-    m.$('#kphoto').append(window.mfuPhotoBlock(kid.photo_url, { alt: kid.first_name, route: 'parent/photo?student_id=' + encodeURIComponent(kid.id), onSaved: u => { kid.photo_url = u; a.querySelector('img')?.remove(); a.insertAdjacentHTML('afterbegin', `<img src="${esc(u)}" alt="">`); } }));
+    m.$('#kphoto').append(window.mfuPhotoBlock(kid.photo_url, { alt: kid.first_name, route: state.role === 'student' ? 'student/photo' : 'parent/photo?student_id=' + encodeURIComponent(kid.id), onSaved: u => { kid.photo_url = u; a.querySelector('img')?.remove(); a.insertAdjacentHTML('afterbegin', `<img src="${esc(u)}" alt="">`); } }));
   });
   document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[data-kid-photo],[data-photo-student]')) { e.preventDefault(); e.target.click(); } });
 

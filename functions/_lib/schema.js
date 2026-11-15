@@ -43,6 +43,7 @@ const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS student_demo_routines (student_id TEXT PRIMARY KEY REFERENCES students(id) ON DELETE CASCADE, apparatus TEXT DEFAULT 'pole', content TEXT DEFAULT '', video_url TEXT, updated_at INTEGER, updated_by TEXT)`,
   `CREATE TABLE IF NOT EXISTS demo_lineup (id TEXT PRIMARY KEY, demo_id TEXT NOT NULL REFERENCES demos(id) ON DELETE CASCADE, kind TEXT NOT NULL, ref_id TEXT NOT NULL, sort_order INTEGER NOT NULL, duration INTEGER DEFAULT 0, song_title TEXT, song_url TEXT)`,
   `CREATE TABLE IF NOT EXISTS login_codes (email TEXT NOT NULL, role TEXT NOT NULL, code_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, tries INTEGER DEFAULT 0, PRIMARY KEY(email,role))`,
+  `CREATE TABLE IF NOT EXISTS student_requests (id TEXT PRIMARY KEY, first_name TEXT NOT NULL, last_name TEXT, dob TEXT, email TEXT NOT NULL, parent_email TEXT, password_hash TEXT, password_salt TEXT, status TEXT NOT NULL DEFAULT 'pending', student_id TEXT, created_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS chat_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat TEXT NOT NULL, author_key TEXT NOT NULL, author_name TEXT, author_role TEXT, body TEXT NOT NULL, pinned INTEGER DEFAULT 0, poll_id TEXT, created_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS polls (id TEXT PRIMARY KEY, chat TEXT, question TEXT NOT NULL, options TEXT NOT NULL, multi INTEGER DEFAULT 0, closed INTEGER DEFAULT 0, created_by TEXT, created_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS poll_votes (poll_id TEXT NOT NULL REFERENCES polls(id) ON DELETE CASCADE, voter TEXT NOT NULL, voter_name TEXT, choice INTEGER NOT NULL, PRIMARY KEY(poll_id,voter,choice))`,
@@ -87,7 +88,12 @@ const COLUMNS = [
   ['coaches', 'gender', 'TEXT'],
   ['announcements', 'form_id', 'TEXT'],
   ['skills', 'general', 'INTEGER DEFAULT 0'],
-  ['pyramids', 'apparatus', "TEXT DEFAULT 'pole'"]
+  ['pyramids', 'apparatus', "TEXT DEFAULT 'pole'"],
+  ['students', 'email', 'TEXT'],
+  ['students', 'password_hash', 'TEXT'],
+  ['students', 'password_salt', 'TEXT'],
+  ['students', 'last_login', 'TEXT'],
+  ['students', 'tour_done', 'INTEGER DEFAULT 0']
 ];
 
 // D1 bills every row a query scans. These let lookups by student, date or coach read only the matching rows.
@@ -120,11 +126,12 @@ const INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_polls_chat ON polls(chat,created_at)',
   'CREATE INDEX IF NOT EXISTS idx_pyramids_demo ON pyramids(demo_id,sort_order)',
   'CREATE INDEX IF NOT EXISTS idx_spots_pyramid ON pyramid_spots(pyramid_id,position)',
-  'CREATE INDEX IF NOT EXISTS idx_lineup_demo ON demo_lineup(demo_id,sort_order)'
+  'CREATE INDEX IF NOT EXISTS idx_lineup_demo ON demo_lineup(demo_id,sort_order)',
+  'CREATE INDEX IF NOT EXISTS idx_students_email ON students(email)'
 ];
 
 // Bump when STATEMENTS, COLUMNS or INDEXES change. A cold start then costs one read instead of ~90 queries.
-const SCHEMA_VERSION = '2026-11-14.4';
+const SCHEMA_VERSION = '2026-11-14.5';
 
 // The original sessions table only allowed admin and parent roles. Rebuild it once so coach sessions fit, keeping everyone signed in.
 async function upgradeSessions(env) {

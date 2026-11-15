@@ -69,7 +69,8 @@
   const TABS = {
     admin: [['overview', '🏠', 'Home'], ['students', '🧒', 'Students'], ['attendance', '✅', 'Attendance'], ['calendar', '📅', 'Calendar']],
     coach: [['coach_home', '🏠', 'Home'], ['students', '🧒', 'Students'], ['attendance', '✅', 'Attendance'], ['evaluations', '📝', 'Evaluate']],
-    parent: [['home', '🏠', 'Home'], ['p_events', '📅', 'Events'], ['p_contact', '💬', 'Coach'], ['p_announcements', '📣', 'News']]
+    parent: [['home', '🏠', 'Home'], ['p_events', '📅', 'Events'], ['p_contact', '💬', 'Coach'], ['p_announcements', '📣', 'News']],
+    student: [['home', '🏠', 'Home'], ['chats', '💬', 'Chats'], ['p_events', '📅', 'Events'], ['p_skills', '🤸', 'Skills']]
   };
   function updateChrome() {
     const on = !!state.role;
@@ -220,7 +221,7 @@
   function markDone(role) {
     if (role === 'admin') { try { localStorage.setItem('mfu-tour-admin', '1'); } catch { /* ignore */ } return; }
     if (state.me) state.me.tour_done = true;
-    api(role === 'parent' ? 'parent/tour' : 'tour', { method: 'POST', body: '{}' }).catch(() => {});
+    api(role === 'parent' ? 'parent/tour' : role === 'student' ? 'student/tour' : 'tour', { method: 'POST', body: '{}' }).catch(() => {});
   }
 
   /* ---------- sign out button in the header, logo goes home ---------- */

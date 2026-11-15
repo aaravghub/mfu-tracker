@@ -59,8 +59,10 @@
         if (d.signup && mode !== 'admin' && window.signupView) { signupView(mode); const f = document.querySelector('#suf'); if (f) { f.elements.email.value = d.signup.email; f.elements.name.value = d.signup.name; } toast('No account yet. Finish signing up and choose a password.'); }
         else toast(d.error || 'Google sign-in did not work.');
       } });
-      // Google draws this button itself; its dark style is the closest match to the page's own black buttons.
-      google.accounts.id.renderButton($('#gbtn'), { theme: 'filled_black', size: 'large', text: 'continue_with', shape: 'rectangular', logo_alignment: 'center', width: Math.min(400, $('#gbtn').clientWidth || 320) });
+      // Google draws its button in a frame we cannot style, so ours is shown and Google's sits invisibly on top to take the tap.
+      const box = $('#gbtn');
+      box.innerHTML = `<span class="g-face" aria-hidden="true"><svg viewBox="0 0 48 48" width="20" height="20"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.8 6C12.3 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 7l7.2 5.6c4.2-3.9 7.1-9.6 7.1-17.1z"/><path fill="#FBBC05" d="M10.4 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.8-6C.9 16.6 0 20.2 0 24s.9 7.4 2.6 10.7l7.8-6z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.2-5.6c-2 1.4-4.7 2.3-8.7 2.3-6.3 0-11.7-4.1-13.6-9.8l-7.8 6C6.6 42.6 14.6 48 24 48z"/></svg>Continue with Google</span><div class="g-real"></div>`;
+      google.accounts.id.renderButton(box.querySelector('.g-real'), { type: 'standard', size: 'large', text: 'continue_with', width: Math.min(400, box.clientWidth || 320) });
     })();
   };
 })();

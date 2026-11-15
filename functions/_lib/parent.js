@@ -152,8 +152,18 @@ export async function handleParent(path, method, request, env) {
     return json({ ok: true });
   }
 
-  if (sub === 'home' && method === 'GET') {
-    const children = await childrenFor(env, parent.id);
+  if (sub === 'home' && method === 'GET') return json(await portalBody(env, parent, await childrenFor(env, parent.id)));
+
+  { const f = await handleParentFeatures(sub, method, body, env, request, parent); if (f) return f; }
+  { const f = await handleParentForms(sub, method, body, env, parent); if (f) return f; }
+
+  return json({ error: 'Unknown API route.' }, 404);
+}
+
+// The portal a parent (or a student, about themselves) sees: their children, every event and demo, links, shop,
+// forms, and the pyramid plans and running order for each demo their child is in.
+export async function portalBody(env, parent, children) {
+  {
     // Every scheduled event and demo shows to every parent; demos their child is in are marked.
     const [events, demos] = (await env.DB.batch([
       env.DB.prepare("SELECT id,title,event_type,event_date,event_time,location,center_id,details,signup_url FROM events WHERE event_date>=date('now','-1 day')"),
@@ -166,11 +176,18 @@ export async function handleParent(path, method, request, env) {
     for (const d of demos) events.push({ id: d.id, title: d.title, event_type: 'demo', event_date: d.demo_date, event_time: d.start_time, arrive_time: going.has(d.id) ? d.arrive_time : null, location: d.location, details: d.details, going: going.has(d.id) });
     events.sort((a, b) => (a.event_date + (a.event_time || '')).localeCompare(b.event_date + (b.event_time || '')));
     const forms = await parentForms(env, parent, children);
-    return json({ parent, children, events, links, shop, forms, ...extras });
+    return { parent, children, events, links, shop, forms, plans: await demoPlans(env, [...going]), ...extras };
   }
+}
 
-  { const f = await handleParentFeatures(sub, method, body, env, request, parent); if (f) return f; }
-  { const f = await handleParentForms(sub, method, body, env, parent); if (f) return f; }
-
-  return json({ error: 'Unknown API route.' }, 404);
+// Pyramids (with every spot) and the running order for the given demos, for families to see.
+async function demoPlans(env, demoIds) {
+  if (!demoIds.length) return {};
+  const q = demoIds.map(() => '?').join(',');
+  const [pyrs, lineup] = (await env.DB.batch([
+    env.DB.prepare(`SELECT id,name,kind,apparatus,demo_id,sort_order FROM pyramids WHERE demo_id IN (${q}) ORDER BY sort_order`).bind(...demoIds),
+    env.DB.prepare(`SELECT l.demo_id,l.kind,l.ref_id,l.duration,l.song_title,CASE l.kind WHEN 'pyramid' THEN p.name WHEN 'solo' THEN s.first_name||' '||COALESCE(s.last_name,'') ELSE r.title END AS label FROM demo_lineup l LEFT JOIN pyramids p ON l.kind='pyramid' AND p.id=l.ref_id LEFT JOIN students s ON l.kind='solo' AND s.id=l.ref_id LEFT JOIN demo_routines r ON l.kind='routine' AND r.id=l.ref_id WHERE l.demo_id IN (${q}) ORDER BY l.sort_order`).bind(...demoIds)
+  ])).map(r => r.results);
+  const spots = pyrs.length ? (await env.DB.prepare(`SELECT sp.pyramid_id,sp.position,sp.place,sp.x,sp.y,sp.student_id,COALESCE(sk.name,sp.skill_name) AS skill,s.first_name||' '||COALESCE(s.last_name,'') AS student FROM pyramid_spots sp LEFT JOIN skills sk ON sk.id=sp.skill_id LEFT JOIN students s ON s.id=sp.student_id WHERE sp.pyramid_id IN (${pyrs.map(() => '?').join(',')}) ORDER BY sp.position`).bind(...pyrs.map(p => p.id)).all()).results : [];
+  return Object.fromEntries(demoIds.map(d => [d, { pyramids: pyrs.filter(p => p.demo_id === d).map(p => ({ ...p, spots: spots.filter(s => s.pyramid_id === p.id) })), lineup: lineup.filter(l => l.demo_id === d) }]));
 }

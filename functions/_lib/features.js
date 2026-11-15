@@ -70,12 +70,16 @@ export async function parentExtras(env, parent, children) {
       env.DB.prepare('SELECT record_date,metric,value FROM fitness_records WHERE student_id=? ORDER BY record_date DESC LIMIT 200').bind(c.id),
       env.DB.prepare('SELECT id,url,caption,taken_date,created_at FROM student_photos WHERE student_id=? ORDER BY COALESCE(taken_date,created_at) DESC LIMIT 60').bind(c.id),
       env.DB.prepare('SELECT cs.event_id,cs.apparatus,cs.score,e.title,e.event_date,(SELECT COUNT(*)+1 FROM comp_scores x WHERE x.event_id=cs.event_id AND x.apparatus=cs.apparatus AND x.score>cs.score) AS rank,(SELECT COUNT(*) FROM comp_scores x WHERE x.event_id=cs.event_id AND x.apparatus=cs.apparatus) AS total FROM comp_scores cs JOIN events e ON e.id=cs.event_id WHERE cs.student_id=? ORDER BY e.event_date DESC').bind(c.id),
-      env.DB.prepare("SELECT r.apparatus,r.from_level,r.target_level,r.outcome,e.title,e.event_date,(SELECT COUNT(*) FROM eval_results x WHERE x.report_id=r.id AND x.result='pass') AS passed,(SELECT COUNT(*) FROM eval_results x WHERE x.report_id=r.id) AS tried FROM eval_reports r JOIN events e ON e.id=r.event_id WHERE r.student_id=? AND e.finalized_at IS NOT NULL ORDER BY e.event_date DESC").bind(c.id),
+      env.DB.prepare("SELECT r.id,r.apparatus,r.from_level,r.target_level,r.outcome,e.title,e.event_date,(SELECT COUNT(*) FROM eval_results x WHERE x.report_id=r.id AND x.result='pass') AS passed,(SELECT COUNT(*) FROM eval_results x WHERE x.report_id=r.id) AS tried FROM eval_reports r JOIN events e ON e.id=r.event_id WHERE r.student_id=? AND e.finalized_at IS NOT NULL ORDER BY e.event_date DESC").bind(c.id),
       env.DB.prepare('SELECT d.id,d.title,d.demo_date,d.start_time,d.end_time,d.arrive_time,d.location,d.details,ds.status FROM demo_students ds JOIN demos d ON d.id=ds.demo_id WHERE ds.student_id=? ORDER BY d.demo_date DESC').bind(c.id),
       env.DB.prepare('SELECT id,exercise,record_date,total,duration,taps,created_at FROM rep_sessions WHERE student_id=? ORDER BY record_date DESC,created_at DESC LIMIT 30').bind(c.id),
       env.DB.prepare("SELECT e.id,e.title,e.event_date,ep.status FROM eval_participants ep JOIN events e ON e.id=ep.event_id WHERE ep.student_id=? ORDER BY e.event_date DESC").bind(c.id)
     ]);
     c.eval_attendance = evalAtt.results;
+    // Every skill tried in each finished evaluation, so families can see what was passed and what is next.
+    const reportIds = evals.results.map(r => r.id);
+    const tried = reportIds.length ? await all(env, `SELECT er.report_id,er.result,sk.name,sk.level FROM eval_results er JOIN skills sk ON sk.id=er.skill_id WHERE er.report_id IN (${marks(reportIds)}) ORDER BY sk.level,sk.sort_order,sk.name`, ...reportIds) : [];
+    for (const r of evals.results) r.skills = tried.filter(t => t.report_id === r.id).map(({ report_id, ...t }) => t);
     // Demo routines for the demos this child is in (a routine with no performers listed is for the whole group).
     const demoIds = demos.results.map(d => d.id);
     const routines = demoIds.length ? await all(env, `SELECT id,demo_id,title,apparatus,content,video_url,student_ids FROM demo_routines WHERE demo_id IN (${marks(demoIds)}) ORDER BY sort_order,created_at`, ...demoIds) : [];

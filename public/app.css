@@ -902,7 +902,13 @@ main>header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;heigh
 @media (max-width:700px){.show-fields{grid-template-columns:1fr}}
 
 /* ---------- sign-in: Google, email code, password ---------- */
-.g-btn{display:flex;justify-content:center;min-height:44px;margin:14px 0 4px;border-radius:var(--r-ctl);overflow:hidden}
+.g-btn{position:relative;min-height:44px;margin:14px 0 4px}
+.g-face{display:flex;align-items:center;justify-content:center;gap:10px;min-height:44px;padding:0 14px;border:1px solid var(--control);border-radius:var(--r-ctl);background:var(--surface);color:var(--ink);font:500 15px var(--font)}
+.g-btn:hover .g-face{background:var(--raised)}
+.g-btn:focus-within .g-face{outline:2px solid var(--orange);outline-offset:2px}
+/* Google's own button, stretched over ours and nearly invisible, so the tap and keyboard focus still reach Google. */
+.g-real{position:absolute;inset:0;opacity:.01;overflow:hidden}
+.g-real>div,.g-real iframe{width:100%!important;height:100%!important}
 
 .g-btn:empty{display:none}
 .code-form{display:grid;gap:12px;margin-top:10px}
@@ -911,3 +917,22 @@ main>header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;heigh
 #cstep{display:grid;gap:10px}
 #cstep[hidden]{display:none}
 .code-form[hidden],#login[hidden]{display:none}
+
+/* ---------- batch attendance history grid (scrolls sideways inside its frame, also on phones) ---------- */
+.hist-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.hist{border-collapse:separate;border-spacing:3px;min-width:max-content}
+.hist th,.hist td{border:0;padding:6px 8px;white-space:nowrap}
+.hist th{font-size:12px;text-align:center}
+.hist th:first-child,.hist td:first-child{position:sticky;left:0;background:var(--surface);text-align:left;z-index:1}
+.hist .hc{text-align:center;font-weight:600;border-radius:5px;min-width:34px;background:var(--raised);color:var(--muted)}
+.hist .h-present{background:var(--ok-bg);color:var(--ok-ink)}
+.hist .h-late{background:var(--warn-bg);color:var(--warn-ink)}
+.hist .h-absent{background:var(--bad-bg);color:var(--bad-ink)}
+.hist .h-excused{background:var(--info-bg);color:var(--info-ink)}
+
+/* demo plan: running order and pyramids, the viewer's own spots marked */
+.plan-order,.plan-spots{margin:0 0 16px;padding-left:22px;display:grid;gap:6px}
+.plan-order li{display:flex;flex-direction:column}
+.plan-order li.mine,.plan-spots li.mine{font-weight:600;color:var(--primary)}
+.plan-pyrs{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.plan-pyr .pyr-svg{width:100%;max-width:260px;height:auto}
