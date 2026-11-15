@@ -93,7 +93,8 @@ const COLUMNS = [
   ['students', 'password_hash', 'TEXT'],
   ['students', 'password_salt', 'TEXT'],
   ['students', 'last_login', 'TEXT'],
-  ['students', 'tour_done', 'INTEGER DEFAULT 0']
+  ['students', 'tour_done', 'INTEGER DEFAULT 0'],
+  ['announcements', 'demo_id', 'TEXT']
 ];
 
 // D1 bills every row a query scans. These let lookups by student, date or coach read only the matching rows.
@@ -131,7 +132,7 @@ const INDEXES = [
 ];
 
 // Bump when STATEMENTS, COLUMNS or INDEXES change. A cold start then costs one read instead of ~90 queries.
-const SCHEMA_VERSION = '2026-11-14.5';
+const SCHEMA_VERSION = '2026-11-15.1';
 
 // The original sessions table only allowed admin and parent roles. Rebuild it once so coach sessions fit, keeping everyone signed in.
 async function upgradeSessions(env) {

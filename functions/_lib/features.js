@@ -97,8 +97,8 @@ export async function parentExtras(env, parent, children) {
   // Home practice assigned by coaches.
   const practice = await practiceFor(env, children.map(c => c.id));
   for (const c of children) c.practice = practice.filter(a => a.student_id === c.id);
-  const centers = [...new Set(children.map(c => c.center_id).filter(Boolean))];
-  const announcements = await all(env, "SELECT a.id,a.title,a.body,a.pinned,a.created_at,a.created_by,a.form_id,f.title AS form_title FROM announcements a LEFT JOIN forms f ON f.id=a.form_id AND f.status='open' WHERE a.audience IN ('all','parents') AND (a.center_id IS NULL OR a.center_id=''" + (centers.length ? ' OR a.center_id IN (' + marks(centers) + ')' : '') + ') ORDER BY a.pinned DESC,a.created_at DESC LIMIT 50', ...centers);
+  const centers = [...new Set(children.map(c => c.center_id).filter(Boolean))], demoIds = [...new Set(children.flatMap(c => (c.demos || []).map(d => d.id)))];
+  const announcements = await all(env, "SELECT a.id,a.title,a.body,a.pinned,a.created_at,a.created_by,a.form_id,f.title AS form_title FROM announcements a LEFT JOIN forms f ON f.id=a.form_id AND f.status='open' WHERE a.audience IN ('all','parents') AND (a.center_id IS NULL OR a.center_id=''" + (centers.length ? ' OR a.center_id IN (' + marks(centers) + ')' : '') + ') AND (a.demo_id IS NULL' + (demoIds.length ? ' OR a.demo_id IN (' + marks(demoIds) + ')' : '') + ') ORDER BY a.pinned DESC,a.created_at DESC LIMIT 50', ...centers, ...demoIds);
   const meetings = (await all(env, "SELECT id,title,meeting_date,start_time,end_time,location,description,meet_url,attendees FROM meetings WHERE meeting_date>=date('now','-1 day') ORDER BY meeting_date,start_time"))
     .filter(m => parseList(m.attendees).map(cleanEmail).includes(cleanEmail(parent.email))).map(({ attendees, ...m }) => m);
   const requests = await all(env, 'SELECT r.id,r.kind,r.subject,r.message,r.preferred_times,r.status,r.reply,r.replied_by,r.replied_at,r.created_at,s.first_name,s.last_name FROM parent_requests r LEFT JOIN students s ON s.id=r.student_id WHERE r.parent_id=? ORDER BY r.created_at DESC LIMIT 50', parent.id);
@@ -208,6 +208,23 @@ export async function handleFeatures(path, method, request, env, url, actor) {
 
   // ---- demos: who's going, when to arrive, where, and who showed up ----
   if (root === 'demos') {
+    // Practice for a demo: one email to the demo's families and students, an announcement only they see, and a post in the demo's chat.
+    if (method === 'POST' && id && action === 'practice') {
+      const d = await env.DB.prepare('SELECT id,title FROM demos WHERE id=?').bind(id).first();
+      if (!d) return json({ error: 'Demo not found.' }, 404);
+      const date = str(body?.date, 10), from = str(body?.start_time, 5), to = str(body?.end_time, 5), where = str(body?.location, 200), notes = str(body?.notes, 2000);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ error: 'Choose the practice date.' }, 400);
+      const when = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }) + (from ? ', ' + from + (to ? '–' + to : '') : '');
+      const title = 'Practice for ' + d.title, text = [when, where && 'Where: ' + where, notes].filter(Boolean).join('\n');
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO announcements(id,title,body,audience,demo_id,created_by) VALUES(?,?,?,'parents',?,?)").bind(crypto.randomUUID(), title, text, id, by),
+        env.DB.prepare('INSERT INTO chat_messages(chat,author_key,author_name,author_role,body,pinned,created_at) VALUES(?,?,?,?,?,1,?)').bind('demo:' + id, actor.role === 'admin' ? 'admin' : 'coach:' + actor.id, actor.name || 'MFU', actor.role === 'admin' ? 'admin' : 'coach', title + '\n' + text, Math.floor(Date.now() / 1000))
+      ]);
+      const ids = (await all(env, 'SELECT student_id FROM demo_students WHERE demo_id=?', id)).map(r => r.student_id);
+      const people = [...await recipientsFor(env, { type: 'students', student_ids: ids }), ...(ids.length ? await all(env, `SELECT first_name AS name,email FROM students WHERE email IS NOT NULL AND id IN (${marks(ids)})`, ...ids) : [])];
+      const r = await notify(env, people, title + ' — ' + when, [title + ': ' + when + '.', where && 'Where: ' + where, notes].filter(Boolean), `<p style="margin:18px 0 0;font-size:14px">See it in <a href="${esc(siteUrl(env, request))}">MFU Tracker</a>.</p>`);
+      return json({ ok: true, emailed: r.sent || 0, skipped: !!r.skipped });
+    }
     if (method === 'GET' && !id) {
       const [demos, kids] = await env.DB.batch([
         env.DB.prepare('SELECT * FROM demos ORDER BY demo_date DESC'),

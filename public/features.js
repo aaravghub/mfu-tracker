@@ -186,8 +186,18 @@
     $$('[data-radd]').forEach(b => b.onclick = () => routineModal(demos.find(d => d.id === b.dataset.radd)));
     $$('[data-dpyr]').forEach(b => b.onclick = () => mfuDemoPyramids(demos.find(d => d.id === b.dataset.dpyr)));
     $$('[data-dshow]').forEach(b => b.onclick = () => mfuDemoShow(demos.find(d => d.id === b.dataset.dshow)));
-    // Practice for a demo: the meeting form with the demo's families already invited.
-    $$('[data-dprac]').forEach(b => b.onclick = () => { const d = demos.find(x => x.id === b.dataset.dprac); meetingModal({ title: 'Practice: ' + d.title, description: 'Practice for the ' + d.title + ' demo on ' + fmtShort(d.demo_date) + '.', attendees: d.students.map(s => s.parent_email).filter(Boolean) }); });
+    // Practice for a demo: emails the demo's families, an announcement only they see, and a post in the demo's chat.
+    $$('[data-dprac]').forEach(b => b.onclick = () => {
+      const d = demos.find(x => x.id === b.dataset.dprac);
+      const m = openModal('Schedule practice: ' + d.title, `<form id="dpf" class="form-grid"><label>Date<input type="date" name="date" required min="${todayStr()}"></label><label>Location<input name="location" placeholder="Center or address"></label>
+        <label>Starts<input type="time" name="start_time"></label><label>Ends<input type="time" name="end_time"></label>
+        <label class="wide">Notes<textarea name="notes" rows="3" placeholder="What to bring, what we will practice"></textarea></label>
+        <p class="muted wide">Emails the ${d.students.length} kid${d.students.length === 1 ? '' : 's'} in this demo and their families, shows in their announcements, and posts in the demo chat.</p>
+        <div class="modal-actions wide"><button class="btn">Schedule practice</button></div></form>`);
+      m.$('#dpf').onsubmit = async e => { e.preventDefault(); const btn = e.target.querySelector('button'); btn.disabled = true;
+        try { const r = await api('demos/' + d.id + '/practice', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(e.target))) }); toast(r.skipped ? 'Practice posted. Email is not connected, so nobody was emailed.' : `Practice posted · ${r.emailed} emailed`); m.close(); }
+        catch (err) { toast(err.message); btn.disabled = false; } };
+    });
     $$('[data-redit]').forEach(b => b.onclick = () => { const [did, rid] = b.dataset.redit.split('|'), d = demos.find(x => x.id === did); routineModal(d, d.routines.find(r => r.id === rid)); });
     $$('[data-rdel]').forEach(b => b.onclick = async () => { if (confirm('Delete this routine?')) { await api('demo-routines/' + b.dataset.rdel, { method: 'DELETE' }); toast('Routine deleted'); show('demos'); } });
     $$('[data-datt]').forEach(b => b.onclick = () => {
