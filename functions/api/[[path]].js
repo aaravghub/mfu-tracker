@@ -15,6 +15,7 @@ import { servePhoto, savePhoto } from '../_lib/photos.js';
 import { handleVideo } from '../_lib/video.js';
 import { handleChat, handleChatMessage } from '../_lib/chat.js';
 import { handlePyramids, handleLineup } from '../_lib/pyramids.js';
+import { handleSignin } from '../_lib/signin.js';
 // Coaches can do everything the admin can except manage coach and parent accounts.
 const adminOnly = (path, method) => { const [root] = path.split('/'); return root === 'coach-accounts' || root === 'signups' || (root === 'parents' && method !== 'GET') || (root === 'coaches' && method !== 'GET'); };
 // One random code per database, made on first use.
@@ -63,18 +64,19 @@ export async function onRequest({request,env,params}){
  }
  if(path==='login'&&method==='POST'){if(!env.ADMIN_PASSWORD)return json({error:'ADMIN_PASSWORD secret is not configured.'},500);const key='admin:'+clientKey(request);if(await isBlocked(env,key))return json({error:'Too many attempts. Please wait 15 minutes and try again.'},429);const body=await request.json().catch(()=>({}));if(typeof body.password!=='string'||!(await secretsMatch(body.password,env.ADMIN_PASSWORD))){await recordFail(env,key);return json({error:'Incorrect password.'},401)}await clearFails(env,key);return json({ok:true,role:'admin'},200,{'set-cookie':await startSession(env,'admin',43200)})}
  if(path==='logout'&&method==='POST'){await endSession(request,env);return json({ok:true},200,{'set-cookie':'mfu_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0'})}
- if(path==='me'&&method==='GET'){const s=await session(request,env);if(!s)return json({authenticated:false});if(s.role==='parent'){const p=s.parent_id?await env.DB.prepare('SELECT name,email,tour_done FROM parents WHERE id=? AND COALESCE(active,1)=1').bind(s.parent_id).first():null;return p?json({authenticated:true,role:'parent',name:p.name,email:p.email,tour_done:!!p.tour_done}):json({authenticated:false})}if(s.role==='coach'){const c=s.coach_id?await env.DB.prepare('SELECT id,name,email,tour_done FROM coaches WHERE id=? AND COALESCE(active,1)=1 AND password_hash IS NOT NULL').bind(s.coach_id).first():null;return c?json({authenticated:true,role:'coach',name:c.name,email:c.email,coach_id:c.id,tour_done:!!c.tour_done}):json({authenticated:false})}return json({authenticated:true,role:s.role})}
+ if(path==='me'&&method==='GET'){const s=await session(request,env);if(!s)return json({authenticated:false});if(s.role==='parent'){const p=s.parent_id?await env.DB.prepare('SELECT name,email,tour_done FROM parents WHERE id=? AND COALESCE(active,1)=1').bind(s.parent_id).first():null;return p?json({authenticated:true,role:'parent',name:p.name,email:p.email,tour_done:!!p.tour_done}):json({authenticated:false})}if(s.role==='coach'){const c=s.coach_id?await env.DB.prepare('SELECT id,name,email,tour_done FROM coaches WHERE id=? AND COALESCE(active,1)=1 AND (password_hash IS NOT NULL OR invited_at IS NOT NULL)').bind(s.coach_id).first():null;return c?json({authenticated:true,role:'coach',name:c.name,email:c.email,coach_id:c.id,tour_done:!!c.tour_done}):json({authenticated:false})}return json({authenticated:true,role:s.role})}
  // Photos: any signed-in person (admin, coach or parent) can view; keys are unguessable.
  if(path.startsWith('photo/')&&method==='GET'){const s=await session(request,env);if(!s)return json({error:'Please sign in.'},401);return servePhoto(path,request,env)}
  // Chats and polls: admins, coaches and parents, each limited to their own batches and demos.
  { const c=await handleChat(path,method,request,env)||await handleChatMessage(path,method,request,env);if(c)return c }
+ if(path.startsWith('signin/'))return handleSignin(path,method,request,env);
  if(path.startsWith('parent/'))return handleParent(path,method,request,env);
  if(path.startsWith('coach/'))return handleCoachAuth(path,method,request,env);
  if(path.startsWith('signup/'))return handleSignup(path,method,request,env);
  if(path.startsWith('public-form/'))return handlePublicForm(path,method,request,env);
  const s=await session(request,env);if(!s||(s.role!=='admin'&&s.role!=='coach'))return json({error:'Please sign in as an administrator or coach.'},401);
  let actor={role:'admin',name:'Admin'};
- if(s.role==='coach'){const c=s.coach_id?await env.DB.prepare('SELECT id,name,email FROM coaches WHERE id=? AND COALESCE(active,1)=1 AND password_hash IS NOT NULL').bind(s.coach_id).first():null;if(!c)return json({error:'Please sign in again.'},401);if(adminOnly(path,method))return json({error:'Only the admin can manage coach and parent accounts.'},403);actor={role:'coach',id:c.id,name:c.name,email:c.email}}
+ if(s.role==='coach'){const c=s.coach_id?await env.DB.prepare('SELECT id,name,email FROM coaches WHERE id=? AND COALESCE(active,1)=1 AND (password_hash IS NOT NULL OR invited_at IS NOT NULL)').bind(s.coach_id).first():null;if(!c)return json({error:'Please sign in again.'},401);if(adminOnly(path,method))return json({error:'Only the admin can manage coach and parent accounts.'},403);actor={role:'coach',id:c.id,name:c.name,email:c.email}}
  // A button that just emailed more than 20 people waits 10 minutes before it runs again, unless the person
  // confirms (x-bypass-cooldown). Checked before the button does anything, so nothing is half-done. Evaluations are exempt.
  if((method==='POST'||method==='PUT')&&!path.startsWith('evaluations')){const last=Number((await env.DB.prepare('SELECT v FROM schema_meta WHERE k=?').bind('mailcd:'+path).first())?.v||0),wait=last+600-Math.floor(Date.now()/1000);if(wait>0&&request.headers.get('x-bypass-cooldown')!=='1')return json({error:'This button emailed more than 20 people less than 10 minutes ago.',cooldown:true,wait},429);env={...env,MAIL_GUARD:path}}

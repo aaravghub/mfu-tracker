@@ -900,3 +900,13 @@ main>header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;heigh
 .show-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)}
 .run{text-align:center}
 @media (max-width:700px){.show-fields{grid-template-columns:1fr}}
+
+/* ---------- sign-in: Google, email code, password ---------- */
+.g-btn{display:flex;justify-content:center;min-height:44px;margin:14px 0 4px}
+.g-btn:empty{display:none}
+.code-form{display:grid;gap:12px;margin-top:10px}
+.code-form label{display:grid;gap:4px;font-size:13px;font-weight:500;color:var(--muted)}
+.code-form #ccode{font-size:22px;letter-spacing:6px;text-align:center}
+#cstep{display:grid;gap:10px}
+#cstep[hidden]{display:none}
+.code-form[hidden],#login[hidden]{display:none}
