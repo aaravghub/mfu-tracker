@@ -859,3 +859,35 @@ main>header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;heigh
 .poll-opt.on{border-color:var(--orange);font-weight:500}
 .poll-opt:disabled{cursor:default;opacity:1}
 @media (max-width:700px){.chat-box .chat-log{height:56dvh}.msg{max-width:92%}}
+
+/* ---------- pyramids ---------- */
+.pyr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.pyr-card{display:grid;gap:6px;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.pyr-card:hover{border-color:var(--ink)}
+.pyr-edit{display:grid;grid-template-columns:minmax(220px,320px) 1fr;gap:16px;align-items:start;margin:12px 0}
+.pyr-svg{display:block;width:100%;height:auto;background:var(--raised);border-radius:var(--r-card);touch-action:manipulation;cursor:crosshair}
+.pyr-pole{fill:#8a5a2b;stroke:#5c3b1a;stroke-width:1.5}
+:root[data-theme="dark"] .pyr-pole{fill:#a8733d}
+.pyr-rope{stroke:#c49a5a;stroke-width:6;stroke-linecap:round}
+.pyr-ground{stroke:var(--muted);stroke-width:2}
+.pyr-label{fill:var(--muted);font:12px var(--font)}
+.pyr-dot circle{fill:var(--orange);stroke:var(--surface);stroke-width:3}
+.pyr-dot text{fill:#fff;font:600 13px var(--font);pointer-events:none}
+.pyr-dot.on circle{fill:var(--primary)}
+.pyr-dot{cursor:pointer}
+.pyr-hint{margin:6px 0 0;font-size:13px}
+.pyr-spots{display:grid;gap:6px;margin-bottom:8px}
+.pyr-spot{display:grid;grid-template-columns:36px 90px 1fr 1fr 32px;gap:6px;align-items:center;padding:6px;border:1px solid var(--line);border-radius:var(--r-ctl)}
+.pyr-spot.on{border-color:var(--orange);background:var(--brand-soft)}
+.pyr-spot input{grid-column:3}
+.pyr-spot select,.pyr-spot input{min-height:34px;font-size:14px}
+.pyr-num{width:32px;height:32px;border-radius:50%;border:0;background:var(--orange);color:#fff;font:600 14px var(--font);cursor:pointer}
+.pyr-order{padding-left:20px;display:grid;gap:6px}
+.pyr-order li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-ctl)}
+@media (max-width:700px){
+  .pyr-edit{grid-template-columns:1fr}
+  .pyr-svg{max-height:52dvh}
+  .pyr-spot{grid-template-columns:36px 1fr 32px}
+  .pyr-spot select,.pyr-spot input{grid-column:2;font-size:16px}
+  .pyr-spot .icon-btn{grid-column:3;grid-row:1}
+}

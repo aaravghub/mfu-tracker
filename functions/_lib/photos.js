@@ -7,12 +7,13 @@ import { json } from './util.js';
 const MAX_BYTES = 400 * 1024; // the browser aims for 300 KB; this is the hard ceiling
 // R2 free tier: 10 GB stored, 1M writes and 10M reads a month. Stop a little short of each.
 const LIMIT = { bytes: 9.5e9, writes: 900000, reads: 9000000 };
-const KEY_RE = /^(student|skill|metric|routine|progress)\/[A-Za-z0-9_-]{1,80}\/[0-9a-f-]{36}\.(webp|jpg)$/;
+const KEY_RE = /^(student|skill|metric|routine|progress|pyramid)\/[A-Za-z0-9_-]{1,80}\/[0-9a-f-]{36}\.(webp|jpg)$/;
 const one = (env, sql, ...b) => env.DB.prepare(sql).bind(...b).first();
 // Where each kind of photo is recorded. `old` is the photo it replaces (null: none; undefined: the target does not exist).
 const TARGET = {
   student: async (env, id) => { const r = await one(env, 'SELECT photo_url AS url FROM students WHERE id=?', id); return { old: r ? r.url : undefined, set: url => env.DB.prepare('UPDATE students SET photo_url=? WHERE id=?').bind(url, id) }; },
   skill: async (env, id) => { const r = await one(env, 'SELECT image_url AS url FROM skills WHERE id=?', id); return { old: r ? r.url : undefined, set: url => env.DB.prepare('UPDATE skills SET image_url=? WHERE id=?').bind(url, id) }; },
+  pyramid: async (env, id) => { const r = await one(env, 'SELECT image_url AS url FROM pyramids WHERE id=?', id); return { old: r ? r.url : undefined, set: url => env.DB.prepare('UPDATE pyramids SET image_url=? WHERE id=?').bind(url, id) }; },
   metric: async (env, id) => ({ old: (await one(env, 'SELECT image_url AS url FROM metric_photos WHERE metric=?', id))?.url ?? null, set: url => env.DB.prepare('INSERT INTO metric_photos(image_url,metric) VALUES(?,?) ON CONFLICT(metric) DO UPDATE SET image_url=excluded.image_url').bind(url, id) }),
   // id is "<student id>--pole" or "--rope"
   routine: async (env, id) => {

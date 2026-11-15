@@ -38,6 +38,8 @@ const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS form_responses (id TEXT PRIMARY KEY, form_id TEXT NOT NULL REFERENCES forms(id) ON DELETE CASCADE, parent_id TEXT, student_id TEXT REFERENCES students(id) ON DELETE CASCADE, name TEXT, email TEXT, answers TEXT NOT NULL DEFAULT '{}', created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS parent_requests (id TEXT PRIMARY KEY, parent_id TEXT NOT NULL REFERENCES parents(id) ON DELETE CASCADE, student_id TEXT REFERENCES students(id) ON DELETE SET NULL, kind TEXT NOT NULL CHECK(kind IN ('meeting','question')), subject TEXT NOT NULL, message TEXT DEFAULT '', preferred_times TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'open', reply TEXT, replied_by TEXT, replied_at TEXT, meeting_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS metric_photos (metric TEXT PRIMARY KEY, image_url TEXT)`,
+  `CREATE TABLE IF NOT EXISTS pyramids (id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'full', people INTEGER DEFAULT 2, notes TEXT DEFAULT '', image_url TEXT, demo_id TEXT REFERENCES demos(id) ON DELETE SET NULL, sort_order INTEGER DEFAULT 0, base_id TEXT, created_by TEXT, created_at INTEGER)`,
+  `CREATE TABLE IF NOT EXISTS pyramid_spots (id TEXT PRIMARY KEY, pyramid_id TEXT NOT NULL REFERENCES pyramids(id) ON DELETE CASCADE, position INTEGER NOT NULL, skill_id TEXT, skill_name TEXT, place TEXT NOT NULL DEFAULT 'ground', x REAL DEFAULT 0.5, y REAL DEFAULT 0, student_id TEXT REFERENCES students(id) ON DELETE SET NULL)`,
   `CREATE TABLE IF NOT EXISTS chat_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat TEXT NOT NULL, author_key TEXT NOT NULL, author_name TEXT, author_role TEXT, body TEXT NOT NULL, pinned INTEGER DEFAULT 0, poll_id TEXT, created_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS polls (id TEXT PRIMARY KEY, chat TEXT, question TEXT NOT NULL, options TEXT NOT NULL, multi INTEGER DEFAULT 0, closed INTEGER DEFAULT 0, created_by TEXT, created_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS poll_votes (poll_id TEXT NOT NULL REFERENCES polls(id) ON DELETE CASCADE, voter TEXT NOT NULL, voter_name TEXT, choice INTEGER NOT NULL, PRIMARY KEY(poll_id,voter,choice))`,
@@ -111,11 +113,13 @@ const INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)',
   'CREATE INDEX IF NOT EXISTS idx_chat_msgs ON chat_messages(chat,id)',
   'CREATE INDEX IF NOT EXISTS idx_chat_pinned ON chat_messages(chat,pinned)',
-  'CREATE INDEX IF NOT EXISTS idx_polls_chat ON polls(chat,created_at)'
+  'CREATE INDEX IF NOT EXISTS idx_polls_chat ON polls(chat,created_at)',
+  'CREATE INDEX IF NOT EXISTS idx_pyramids_demo ON pyramids(demo_id,sort_order)',
+  'CREATE INDEX IF NOT EXISTS idx_spots_pyramid ON pyramid_spots(pyramid_id,position)'
 ];
 
 // Bump when STATEMENTS, COLUMNS or INDEXES change. A cold start then costs one read instead of ~90 queries.
-const SCHEMA_VERSION = '2026-11-14.1';
+const SCHEMA_VERSION = '2026-11-14.2';
 
 // The original sessions table only allowed admin and parent roles. Rebuild it once so coach sessions fit, keeping everyone signed in.
 async function upgradeSessions(env) {
