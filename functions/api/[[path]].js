@@ -13,6 +13,7 @@ import { handleInsights } from '../_lib/insights.js';
 import { handleAssistant } from '../_lib/ai.js';
 import { servePhoto, savePhoto } from '../_lib/photos.js';
 import { handleVideo } from '../_lib/video.js';
+import { handleChat, handleChatMessage } from '../_lib/chat.js';
 // Coaches can do everything the admin can except manage coach and parent accounts.
 const adminOnly = (path, method) => { const [root] = path.split('/'); return root === 'coach-accounts' || root === 'signups' || (root === 'parents' && method !== 'GET') || (root === 'coaches' && method !== 'GET'); };
 // One random code per database, made on first use.
@@ -64,6 +65,8 @@ export async function onRequest({request,env,params}){
  if(path==='me'&&method==='GET'){const s=await session(request,env);if(!s)return json({authenticated:false});if(s.role==='parent'){const p=s.parent_id?await env.DB.prepare('SELECT name,email,tour_done FROM parents WHERE id=? AND COALESCE(active,1)=1').bind(s.parent_id).first():null;return p?json({authenticated:true,role:'parent',name:p.name,email:p.email,tour_done:!!p.tour_done}):json({authenticated:false})}if(s.role==='coach'){const c=s.coach_id?await env.DB.prepare('SELECT id,name,email,tour_done FROM coaches WHERE id=? AND COALESCE(active,1)=1 AND password_hash IS NOT NULL').bind(s.coach_id).first():null;return c?json({authenticated:true,role:'coach',name:c.name,email:c.email,coach_id:c.id,tour_done:!!c.tour_done}):json({authenticated:false})}return json({authenticated:true,role:s.role})}
  // Photos: any signed-in person (admin, coach or parent) can view; keys are unguessable.
  if(path.startsWith('photo/')&&method==='GET'){const s=await session(request,env);if(!s)return json({error:'Please sign in.'},401);return servePhoto(path,request,env)}
+ // Chats and polls: admins, coaches and parents, each limited to their own batches and demos.
+ { const c=await handleChat(path,method,request,env)||await handleChatMessage(path,method,request,env);if(c)return c }
  if(path.startsWith('parent/'))return handleParent(path,method,request,env);
  if(path.startsWith('coach/'))return handleCoachAuth(path,method,request,env);
  if(path.startsWith('signup/'))return handleSignup(path,method,request,env);

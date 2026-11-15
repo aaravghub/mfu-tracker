@@ -827,3 +827,35 @@ main>header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;heigh
 .vid-tile:hover{background:#2a2a2a}
 .vid-frame{position:relative;aspect-ratio:16/9;background:#000;border-radius:var(--r-card);overflow:hidden}
 .vid-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+
+/* ---------- chats and polls ---------- */
+.chat-list{display:grid;gap:6px}
+.chat-row{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--surface);color:inherit;font:inherit;text-align:left;cursor:pointer}
+.chat-row:hover{border-color:var(--ink)}
+.chat-row small{display:block}
+.chat-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.chat-top h2{font-size:18px}
+.chat-box{display:flex;flex-direction:column;padding:0;overflow:hidden}
+.chat-box .chat-log{height:min(60dvh,560px);max-height:none;overflow-y:auto;padding:14px;gap:8px}
+.chat-box .chat-form{padding:10px 12px;margin:0;flex-wrap:wrap}
+.chat-box .chat-form textarea{flex:1 1 220px;min-height:44px}
+.chat-tools{display:flex;gap:8px;align-items:center}
+.msg{max-width:min(560px,88%);padding:8px 12px;border-radius:12px 12px 12px 4px;background:var(--raised);align-self:flex-start}
+.msg.mine{align-self:flex-end;border-radius:12px 12px 4px 12px;background:var(--brand-soft)}
+.msg.pinned{box-shadow:inset 3px 0 0 var(--orange)}
+.msg p{margin:2px 0 0;white-space:normal;overflow-wrap:anywhere}
+.msg-head{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px}
+.msg-acts{display:flex;gap:10px;font-size:12px;color:var(--muted);margin-top:4px;opacity:.7}
+.msg:hover .msg-acts{opacity:1}
+.pins{margin-bottom:10px;border-left:3px solid var(--orange)}
+.pins p{margin:6px 0 0}
+.poll-list{display:grid;gap:10px}
+.poll{display:grid;gap:6px;min-width:min(320px,70vw)}
+.poll small{display:block}
+.poll-opts{display:grid;gap:4px}
+.poll-opt{position:relative;display:flex;justify-content:space-between;gap:10px;align-items:center;min-height:40px;padding:0 12px;border:1px solid var(--control);border-radius:var(--r-ctl);background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer;overflow:hidden}
+.poll-opt span,.poll-opt b{position:relative}
+.poll-opt .poll-bar{position:absolute;inset:0 auto 0 0;width:var(--w);background:var(--brand-soft)}
+.poll-opt.on{border-color:var(--orange);font-weight:500}
+.poll-opt:disabled{cursor:default;opacity:1}
+@media (max-width:700px){.chat-box .chat-log{height:56dvh}.msg{max-width:92%}}
