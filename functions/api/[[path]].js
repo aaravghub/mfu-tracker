@@ -14,7 +14,7 @@ import { handleAssistant } from '../_lib/ai.js';
 import { servePhoto, savePhoto } from '../_lib/photos.js';
 import { handleVideo } from '../_lib/video.js';
 import { handleChat, handleChatMessage } from '../_lib/chat.js';
-import { handlePyramids } from '../_lib/pyramids.js';
+import { handlePyramids, handleLineup } from '../_lib/pyramids.js';
 // Coaches can do everything the admin can except manage coach and parent accounts.
 const adminOnly = (path, method) => { const [root] = path.split('/'); return root === 'coach-accounts' || root === 'signups' || (root === 'parents' && method !== 'GET') || (root === 'coaches' && method !== 'GET'); };
 // One random code per database, made on first use.
@@ -81,7 +81,7 @@ export async function onRequest({request,env,params}){
  if(path==='coach-accounts'||path.startsWith('coach-accounts/'))return handleCoachAccounts(path,method,request,env);
  if(path==='signups'||path.startsWith('signups/'))return handleSignupReview(path,method,request,env,actor);
  { const v=await handleVideo(path,method,request,env,actor);if(v)return v }
- { const py=await handlePyramids(path,method,request,env,url,actor);if(py)return py }
+ { const py=await handlePyramids(path,method,request,env,url,actor)||await handleLineup(path,method,request,env,url,actor);if(py)return py }
  if(path==='photo'&&method==='POST')return savePhoto(env,url.searchParams.get('kind'),url.searchParams.get('id'),request,actor.name);
  if(path==='metric-photos'&&method==='GET')return json((await env.DB.prepare('SELECT metric,image_url FROM metric_photos').all()).results);
  { const bi=await handleInsights(path,method,env,url);if(bi)return bi }

@@ -891,3 +891,12 @@ main>header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;heigh
   .pyr-spot select,.pyr-spot input{grid-column:2;font-size:16px}
   .pyr-spot .icon-btn{grid-column:3;grid-row:1}
 }
+.show-list{padding-left:22px;display:grid;gap:8px}
+.show-item{padding:10px;border:1px solid var(--line);border-radius:var(--r-ctl)}
+.show-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.show-head .card-actions{margin-left:auto}
+.show-fields{display:grid;grid-template-columns:90px 1fr 1.4fr;gap:8px;margin-top:8px}
+.show-fields label{display:grid;gap:2px;font-size:12px;color:var(--muted)}
+.show-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)}
+.run{text-align:center}
+@media (max-width:700px){.show-fields{grid-template-columns:1fr}}
