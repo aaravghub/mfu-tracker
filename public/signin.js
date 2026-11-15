@@ -59,7 +59,8 @@
         if (d.signup && mode !== 'admin' && window.signupView) { signupView(mode); const f = document.querySelector('#suf'); if (f) { f.elements.email.value = d.signup.email; f.elements.name.value = d.signup.name; } toast('No account yet. Finish signing up and choose a password.'); }
         else toast(d.error || 'Google sign-in did not work.');
       } });
-      google.accounts.id.renderButton($('#gbtn'), { theme: document.documentElement.dataset.theme === 'dark' ? 'filled_black' : 'outline', size: 'large', text: 'continue_with', shape: 'pill', width: Math.min(320, $('#gbtn').clientWidth || 320) });
+      // Google draws this button itself; its dark style is the closest match to the page's own black buttons.
+      google.accounts.id.renderButton($('#gbtn'), { theme: 'filled_black', size: 'large', text: 'continue_with', shape: 'rectangular', logo_alignment: 'center', width: Math.min(400, $('#gbtn').clientWidth || 320) });
     })();
   };
 })();

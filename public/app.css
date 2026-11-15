@@ -902,7 +902,8 @@ main>header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;heigh
 @media (max-width:700px){.show-fields{grid-template-columns:1fr}}
 
 /* ---------- sign-in: Google, email code, password ---------- */
-.g-btn{display:flex;justify-content:center;min-height:44px;margin:14px 0 4px}
+.g-btn{display:flex;justify-content:center;min-height:44px;margin:14px 0 4px;border-radius:var(--r-ctl);overflow:hidden}
+
 .g-btn:empty{display:none}
 .code-form{display:grid;gap:12px;margin-top:10px}
 .code-form label{display:grid;gap:4px;font-size:13px;font-weight:500;color:var(--muted)}
