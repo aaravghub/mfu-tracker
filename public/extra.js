@@ -75,7 +75,7 @@ api = async function (p, o) {
 /* ---------- sign in / set password ---------- */
 function authCard(inner) {
   $('#title').textContent = 'Welcome';
-  $('#content').innerHTML = window.mfuStage ? mfuStage(inner) : `<div class="login card"><img class="login-logo" src="/mfu-logo.png" alt="Mallakhamb Federation USA logo">${inner}</div>`;
+  $('#content').innerHTML = window.mfuStage ? mfuStage(inner) : `<div class="login card"><img class="login-logo" src="/mfu-logo.png?v=2" alt="Mallakhamb Federation USA logo">${inner}</div>`;
 }
 function loginView(mode = 'parent') {
   clearRole();
@@ -130,8 +130,10 @@ async function checkAuth() {
   if (inv && window.coachInviteView) return coachInviteView(inv[1]);
   const m = /^#(coach-)?setup=([a-f0-9]{64})$/.exec(location.hash);
   if (m) return setupView(m[2], m[1] ? 'coach' : 'parent');
+  // Ask who is signed in first, so people already signed in never see (or load) the sign-in page.
+  let me = null; try { me = await api('me'); } catch { /* show sign-in */ }
+  if (me?.authenticated) { setRole(me.role, me); return show(startPage(me.role)); }
   loginView('parent');
-  try { const me = await api('me'); if (me.authenticated) { setRole(me.role, me); show(startPage(me.role)); } } catch { /* stay on sign-in */ }
 }
 $('#logout').onclick = async () => { try { await api('logout', { method: 'POST' }); } catch {} loginView(); };
 

@@ -1,0 +1,7 @@
+# Scripts and styles are requested with a version (?v=N) that changes whenever the file does, so browsers may keep them.
+/*.js
+  Cache-Control: public, max-age=2592000, immutable
+/*.css
+  Cache-Control: public, max-age=2592000, immutable
+/mfu-logo.png
+  Cache-Control: public, max-age=2592000

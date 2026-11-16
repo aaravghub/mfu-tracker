@@ -32,7 +32,7 @@ async function chatsFor(env, me) {
     student: [`SELECT 'batch:'||b.id AS chat,b.name AS title,'batch' AS kind FROM batch_students bs JOIN batches b ON b.id=bs.batch_id WHERE bs.student_id=?1 AND COALESCE(b.active,1)=1`,
       `SELECT 'demo:'||d.id AS chat,d.title,'demo' AS kind,d.demo_date AS date FROM demo_students ds JOIN demos d ON d.id=ds.demo_id WHERE ds.student_id=?1 AND d.demo_date>=${recent}`]
   }[me.role];
-  const rows = (await env.DB.batch(q.map(sql => me.id ? env.DB.prepare(sql).bind(me.id) : env.DB.prepare(sql)))).flatMap(r => r.results);
+  const rows = (await env.DB.batch(q.map(sql => sql.includes('?1') ? env.DB.prepare(sql).bind(me.id) : env.DB.prepare(sql)))).flatMap(r => r.results);
   if (!rows.length) return [];
   // Latest message per chat, for the list.
   const last = (await env.DB.prepare(`SELECT chat,MAX(id) AS id FROM chat_messages WHERE chat IN (${rows.map(() => '?').join(',')}) GROUP BY chat`).bind(...rows.map(r => r.chat)).all()).results;

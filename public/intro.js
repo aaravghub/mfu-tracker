@@ -54,7 +54,7 @@
     const mode = reduce || seen() ? 'done' : 'play';
     mark();
     return `<div class="auth-stage"><div class="mfu-intro ${mode}" title="Tap to replay">${scene}</div>
-      <div class="login card"><img class="login-logo" src="/mfu-logo.png" alt="Mallakhamb Federation USA logo" width="64" height="64">${inner}</div></div>`;
+      <div class="login card"><img class="login-logo" src="/mfu-logo.png?v=2" alt="Mallakhamb Federation USA logo" width="64" height="64">${inner}</div></div>`;
   };
 
   document.addEventListener('click', e => {

@@ -632,18 +632,18 @@ body:not([data-role]) .sidebar nav,body:not([data-role]) .pdf{display:none}
   #tabbar button.active::before{animation:m-grow .25s ease-out}
 
   /* A page's blocks arrive in reading order. */
-  #content.page-in>*{animation:m-rise .42s cubic-bezier(.2,.75,.25,1) both}
-  #content.page-in>*:nth-child(2){animation-delay:.05s}
-  #content.page-in>*:nth-child(3){animation-delay:.1s}
-  #content.page-in>*:nth-child(4){animation-delay:.15s}
-  #content.page-in>*:nth-child(5){animation-delay:.2s}
-  #content.page-in>*:nth-child(n+6){animation-delay:.25s}
-  .rise{animation:m-rise .38s cubic-bezier(.2,.75,.25,1) both}
+  #content.page-in>*{animation:m-rise .24s cubic-bezier(.2,.75,.25,1) both}
+  #content.page-in>*:nth-child(2){animation-delay:.03s}
+  #content.page-in>*:nth-child(3){animation-delay:.06s}
+  #content.page-in>*:nth-child(4){animation-delay:.09s}
+  #content.page-in>*:nth-child(5){animation-delay:.12s}
+  #content.page-in>*:nth-child(n+6){animation-delay:.12s}
+  .rise{animation:m-rise .24s cubic-bezier(.2,.75,.25,1) both}
   .stats .stat,.stat-row .stat{animation:m-rise .4s cubic-bezier(.2,.75,.25,1) both}
   .stats .stat:nth-child(2),.stat-row .stat:nth-child(2){animation-delay:.06s}
   .stats .stat:nth-child(3),.stat-row .stat:nth-child(3){animation-delay:.12s}
   .stats .stat:nth-child(4),.stat-row .stat:nth-child(4){animation-delay:.18s}
-  .table-wrap tbody tr:nth-child(-n+12){animation:m-fade .35s ease both}
+  .table-wrap tbody tr:nth-child(-n+12){animation:m-fade .2s ease both}
   .table-wrap tbody tr:nth-child(2){animation-delay:.03s}.table-wrap tbody tr:nth-child(3){animation-delay:.06s}
   .table-wrap tbody tr:nth-child(4){animation-delay:.09s}.table-wrap tbody tr:nth-child(5){animation-delay:.12s}
   .table-wrap tbody tr:nth-child(6){animation-delay:.15s}.table-wrap tbody tr:nth-child(n+7){animation-delay:.18s}
@@ -936,3 +936,10 @@ main>header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;heigh
 .plan-order li.mine,.plan-spots li.mine{font-weight:600;color:var(--primary)}
 .plan-pyrs{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .plan-pyr .pyr-svg{width:100%;max-width:260px;height:auto}
+
+/* phones: the date arrows sit beside the date, not above and below it */
+@media (max-width:760px){
+  .att-bar .date-step{display:flex;align-items:flex-end;gap:8px;width:100%;flex-wrap:nowrap}
+  .att-bar .date-step label{flex:1 1 auto;min-width:0}
+  .att-bar .date-step .btn{flex:none}
+}
