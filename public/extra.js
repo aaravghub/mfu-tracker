@@ -126,6 +126,8 @@ async function enter() {
   show(startPage(me.role));
 }
 async function checkAuth() {
+  const inv = /^#coach-invite=([a-f0-9]{64})$/.exec(location.hash);
+  if (inv && window.coachInviteView) return coachInviteView(inv[1]);
   const m = /^#(coach-)?setup=([a-f0-9]{64})$/.exec(location.hash);
   if (m) return setupView(m[2], m[1] ? 'coach' : 'parent');
   loginView('parent');

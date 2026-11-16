@@ -30,6 +30,29 @@ export async function handleCoachAuth(path, method, request, env) {
   const sub = path.replace(/^coach\/?/, '');
   const body = method === 'POST' ? await request.json().catch(() => ({})) : {};
 
+  // One-time invite links: anyone with the link can make one coach account, then the link stops working.
+  if (sub === 'invite' && method === 'POST') {
+    const row = await env.DB.prepare('SELECT expires_at,used_at FROM coach_invites WHERE token_hash=?').bind(await sha256(String(body.token || ''))).first();
+    return json({ valid: !!row && !row.used_at && row.expires_at > Math.floor(Date.now() / 1000) });
+  }
+  if (sub === 'join' && method === 'POST') {
+    const hash = await sha256(String(body.token || '')), now = Math.floor(Date.now() / 1000);
+    const email = cleanEmail(body.email), name = String(body.name || '').trim().slice(0, 120), phone = String(body.phone || '').trim().slice(0, 40);
+    if (!name || !isEmail(email)) return json({ error: 'Enter your name and email.' }, 400);
+    { const bad = passwordProblem(body.password, email); if (bad) return json({ error: bad }, 400); }
+    const existing = await findCoach(env, email);
+    if (existing?.password_hash) return json({ error: 'There is already a coach account for that email. Sign in on the Coach tab.' }, 400);
+    const id = existing?.id || crypto.randomUUID();
+    // Claim the link first: only one request can turn used_at from empty to set.
+    const claim = await env.DB.prepare('UPDATE coach_invites SET used_at=?,coach_id=? WHERE token_hash=? AND used_at IS NULL AND expires_at>?').bind(now, id, hash, now).run();
+    if (!claim.meta.changes) return json({ error: 'This invite link has already been used or has expired. Ask MFU for a new one.' }, 400);
+    const { salt, hash: ph } = await makePassword(body.password);
+    if (existing) await env.DB.prepare('UPDATE coaches SET name=?,phone=COALESCE(NULLIF(?,\'\'),phone),password_hash=?,password_salt=?,active=1 WHERE id=?').bind(name, phone, ph, salt, id).run();
+    else await env.DB.prepare('INSERT INTO coaches(id,name,email,phone,password_hash,password_salt,active) VALUES(?,?,?,?,?,?,1)').bind(id, name, email, phone, ph, salt).run();
+    await env.DB.prepare("UPDATE coaches SET last_login=datetime('now'),invited_at=COALESCE(invited_at,datetime('now')) WHERE id=?").bind(id).run();
+    return json({ ok: true, role: 'coach' }, 200, { 'set-cookie': await startSession(env, 'coach', COACH_SESSION_SECONDS, null, id) });
+  }
+
   if (sub === 'login' && method === 'POST') {
     const email = cleanEmail(body.email), key = 'coach:' + email + ':' + clientKey(request);
     if (await isBlocked(env, key)) return json({ error: 'Too many attempts. Please wait 15 minutes and try again.' }, 429);
@@ -87,6 +110,11 @@ export async function handleCoachAccounts(path, method, request, env) {
   if (method === 'GET' && !id) {
     const rows = (await env.DB.prepare('SELECT id,name,email,center_id,active,last_login,invited_at,(password_hash IS NOT NULL) AS has_password FROM coaches ORDER BY name').all()).results;
     return json({ coaches: rows, email: mailConfigured(env) });
+  }
+  if (id === 'invite-link' && method === 'POST') {
+    const token = randomHex(32);
+    await env.DB.prepare('INSERT INTO coach_invites(token_hash,created_by,expires_at) VALUES(?,?,?)').bind(await sha256(token), 'admin', Math.floor(Date.now() / 1000) + TOKEN_SECONDS).run();
+    return json({ ok: true, link: siteUrl(env, request) + '/#coach-invite=' + token });
   }
   if (id && method === 'POST' && action === 'invite') {
     const c = await env.DB.prepare('SELECT id,name,email,password_hash FROM coaches WHERE id=?').bind(id).first();

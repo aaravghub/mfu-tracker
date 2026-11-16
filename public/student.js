@@ -85,4 +85,37 @@
     }).join('');
     openModal(b.dataset.title || 'Demo plan', (order + (pyrs ? `<h4>Pyramids</h4><div class="plan-pyrs">${pyrs}</div>` : '')) || '<p class="muted">The coaches have not made the plan yet.</p>');
   });
+  // ---- coach invites: a one-time link; the coach fills in their own details and password ----
+  const _coachAccounts = PAGES.coach_accounts;
+  PAGES.coach_accounts = async () => {
+    await _coachAccounts();
+    $('#content .welcome-actions').insertAdjacentHTML('beforeend', '<button class="btn" id="cinv">Make an invite link</button>');
+    $('#cinv').onclick = async () => {
+      try {
+        const { link } = await api('coach-accounts/invite-link', { method: 'POST', body: '{}' });
+        const m = openModal('Coach invite link', `<p class="muted">Send this to one coach. They make their own account with it. It works once, for 7 days.</p>
+          <p><input readonly value="${esc(link)}" aria-label="Invite link" style="width:100%"></p>
+          <div class="modal-actions"><a class="btn secondary" href="https://wa.me/?text=${encodeURIComponent('Make your MFU coach account: ' + link)}" target="_blank" rel="noopener">Share to WhatsApp</a><button class="btn" id="ccopy">Copy link</button></div>`);
+        m.$('#ccopy').onclick = () => copyText(link);
+      } catch (e) { toast(e.message); }
+    };
+  };
+
+  window.coachInviteView = async token => {
+    clearRole();
+    const { valid } = await api('coach/invite', { method: 'POST', body: JSON.stringify({ token }) }).catch(() => ({}));
+    const back = () => { history.replaceState(null, '', location.pathname); loginView('coach'); };
+    if (!valid) { authCard('<h2>This invite link has expired</h2><p>It was already used, or it is more than 7 days old. Ask MFU for a new link.</p><p class="center"><a href="#" id="cback">Go to sign in</a></p>'); $('#cback').onclick = e => { e.preventDefault(); back(); }; return; }
+    authCard(`<h2>Make your coach account</h2><p>You were invited to coach with MFU. Fill in your details to start.</p>
+      <form id="cjf" class="form-grid">
+        <label class="wide">Full name<input name="name" required autocomplete="name"></label>
+        <label>Email<input type="email" name="email" required autocomplete="username"></label><label>Phone<input type="tel" name="phone" autocomplete="tel"></label>
+        <label class="wide">Password<input type="password" name="password" required minlength="8" autocomplete="new-password" aria-describedby="cjpw"></label><p class="muted wide" id="cjpw">At least 8 characters with a letter and a number.</p>
+        <button class="primary wide">Create account</button><p class="error wide" id="cjerr" role="alert"></p></form>`);
+    $('#cjf').onsubmit = async e => {
+      e.preventDefault(); const b = e.target.querySelector('button.primary'); b.disabled = true; $('#cjerr').textContent = '';
+      try { await api('coach/join', { method: 'POST', body: JSON.stringify({ token, ...Object.fromEntries(new FormData(e.target)) }) }); history.replaceState(null, '', location.pathname); await enter(); }
+      catch (err) { $('#cjerr').textContent = err.message; b.disabled = false; }
+    };
+  };
 })();

@@ -13,6 +13,7 @@ const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS email_log (id TEXT PRIMARY KEY, subject TEXT, audience TEXT, total INTEGER DEFAULT 0, sent INTEGER DEFAULT 0, failed INTEGER DEFAULT 0, is_test INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   // Coach accounts, meetings, demos, evaluations, competitions, notes, fitness, photos, requests, announcements.
   `CREATE TABLE IF NOT EXISTS coach_centers (coach_id TEXT NOT NULL REFERENCES coaches(id) ON DELETE CASCADE, center_id TEXT NOT NULL REFERENCES centers(id) ON DELETE CASCADE, PRIMARY KEY(coach_id,center_id))`,
+  `CREATE TABLE IF NOT EXISTS coach_invites (token_hash TEXT PRIMARY KEY, created_by TEXT, expires_at INTEGER NOT NULL, used_at INTEGER, coach_id TEXT)`,
   `CREATE TABLE IF NOT EXISTS coach_password_tokens (token_hash TEXT PRIMARY KEY, coach_id TEXT NOT NULL REFERENCES coaches(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS meetings (id TEXT PRIMARY KEY, title TEXT NOT NULL, meeting_date TEXT NOT NULL, start_time TEXT, end_time TEXT, location TEXT, description TEXT DEFAULT '', meet_url TEXT, calendar_event_id TEXT, calendar_url TEXT, attendees TEXT DEFAULT '[]', request_id TEXT, created_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS demos (id TEXT PRIMARY KEY, title TEXT NOT NULL, demo_date TEXT NOT NULL, start_time TEXT, end_time TEXT, arrive_time TEXT, location TEXT, center_id TEXT, details TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
@@ -132,7 +133,7 @@ const INDEXES = [
 ];
 
 // Bump when STATEMENTS, COLUMNS or INDEXES change. A cold start then costs one read instead of ~90 queries.
-const SCHEMA_VERSION = '2026-11-15.1';
+const SCHEMA_VERSION = '2026-11-15.2';
 
 // The original sessions table only allowed admin and parent roles. Rebuild it once so coach sessions fit, keeping everyone signed in.
 async function upgradeSessions(env) {
