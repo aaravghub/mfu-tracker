@@ -16,7 +16,7 @@ const fmtTime = t => { const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); if (!m) ret
 const fmtStamp = s => { if (!s) return '—'; const d = new Date(String(s).replace(' ', 'T') + 'Z'); return isNaN(d) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
 const countdown = s => { const n = daysUntil(s); return n < 0 ? 'Past' : n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : 'In ' + n + ' days'; };
 const centerName = (centers, id) => centers.find(c => c.id === id)?.name || id || 'All centers';
-const typeLabel = t => ({ competition: 'Competition', evaluation: 'Evaluation', demo: 'Demo', meeting: 'Meeting', other: 'Event' }[t] || t);
+const typeLabel = t => ({ competition: 'Competition', evaluation: 'Evaluation', demo: 'Demo', meeting: 'Meeting', practice: 'Practice', other: 'Event' }[t] || t);
 const nameOf = s => s.first_name + ' ' + s.last_name;
 const copyText = async t => { try { await navigator.clipboard.writeText(t); toast('Copied to clipboard'); } catch { prompt('Copy this link:', t); } };
 

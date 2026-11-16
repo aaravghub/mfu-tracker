@@ -943,3 +943,5 @@ main>header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;heigh
   .att-bar .date-step label{flex:1 1 auto;min-width:0}
   .att-bar .date-step .btn{flex:none}
 }
+
+.cal-item.k-practice{background:var(--info-bg);color:var(--info-ink)}

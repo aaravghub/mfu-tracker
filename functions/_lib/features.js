@@ -142,12 +142,16 @@ export async function handleFeatures(path, method, request, env, url, actor) {
   // ---- calendar: everything with a date in a range ----
   if (root === 'calendar' && method === 'GET') {
     const from = validDate(q('from')) ? q('from') : today(), to = validDate(q('to')) ? q('to') : '9999-12-31';
-    const [events, demos, meetings] = await env.DB.batch([
+    const [events, demos, meetings, practices] = await env.DB.batch([
       env.DB.prepare('SELECT id,title,event_type,event_date AS date,event_time AS start_time,location,center_id FROM events WHERE event_date BETWEEN ? AND ? ORDER BY event_date').bind(from, to),
       env.DB.prepare('SELECT id,title,demo_date AS date,start_time,end_time,location,center_id FROM demos WHERE demo_date BETWEEN ? AND ? ORDER BY demo_date').bind(from, to),
-      env.DB.prepare('SELECT id,title,meeting_date AS date,start_time,end_time,location,meet_url FROM meetings WHERE meeting_date BETWEEN ? AND ? ORDER BY meeting_date,start_time').bind(from, to)
+      env.DB.prepare('SELECT id,title,meeting_date AS date,start_time,end_time,location,meet_url FROM meetings WHERE meeting_date BETWEEN ? AND ? ORDER BY meeting_date,start_time').bind(from, to),
+      env.DB.prepare('SELECT id,title,practice_date AS date,start_time,end_time,location,demo_id FROM practices WHERE practice_date BETWEEN ? AND ? ORDER BY practice_date,start_time').bind(from, to)
     ]);
-    return json({ events: events.results, demos: demos.results, meetings: meetings.results });
+    return json({ events: events.results, demos: demos.results, meetings: meetings.results, practices: practices.results });
+  }
+  // Cancel a practice (takes it off the calendar; the announcement and chat post stay as a record).
+  if (root === 'practices' && id && method === 'DELETE') { await env.DB.prepare('DELETE FROM practices WHERE id=?').bind(id).run(); return json({ ok: true });
   }
 
   // ---- people you can invite to a meeting ----
@@ -217,6 +221,7 @@ export async function handleFeatures(path, method, request, env, url, actor) {
       const when = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }) + (from ? ', ' + from + (to ? '–' + to : '') : '');
       const title = 'Practice for ' + d.title, text = [when, where && 'Where: ' + where, notes].filter(Boolean).join('\n');
       await env.DB.batch([
+        env.DB.prepare('INSERT INTO practices(id,demo_id,title,practice_date,start_time,end_time,location,notes,created_by) VALUES(?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), id, title, date, from || null, to || null, where || null, notes || null, by),
         env.DB.prepare("INSERT INTO announcements(id,title,body,audience,demo_id,created_by) VALUES(?,?,?,'parents',?,?)").bind(crypto.randomUUID(), title, text, id, by),
         env.DB.prepare('INSERT INTO chat_messages(chat,author_key,author_name,author_role,body,pinned,created_at) VALUES(?,?,?,?,?,1,?)').bind('demo:' + id, actor.role === 'admin' ? 'admin' : 'coach:' + actor.id, actor.name || 'MFU', actor.role === 'admin' ? 'admin' : 'coach', title + '\n' + text, Math.floor(Date.now() / 1000))
       ]);

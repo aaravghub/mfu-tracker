@@ -174,6 +174,8 @@ export async function portalBody(env, parent, children) {
     const extras = await parentExtras(env, parent, children);
     const going = new Set(children.flatMap(c => c.demos.map(d => d.id)));
     for (const d of demos) events.push({ id: d.id, title: d.title, event_type: 'demo', event_date: d.demo_date, event_time: d.start_time, arrive_time: going.has(d.id) ? d.arrive_time : null, location: d.location, details: d.details, going: going.has(d.id) });
+    if (going.size) for (const p of (await env.DB.prepare(`SELECT id,title,practice_date,start_time,location,notes FROM practices WHERE practice_date>=date('now','-1 day') AND demo_id IN (${[...going].map(() => '?').join(',')})`).bind(...going).all()).results)
+      events.push({ id: p.id, title: p.title, event_type: 'practice', event_date: p.practice_date, event_time: p.start_time, location: p.location, details: p.notes, going: true });
     events.sort((a, b) => (a.event_date + (a.event_time || '')).localeCompare(b.event_date + (b.event_time || '')));
     const forms = await parentForms(env, parent, children);
     return { parent, children, events, links, shop, forms, plans: await demoPlans(env, [...going]), ...extras };

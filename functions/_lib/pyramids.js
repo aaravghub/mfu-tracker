@@ -2,8 +2,9 @@ import { json } from './util.js';
 import { deletePhoto } from './photos.js';
 
 // Pyramids: a library of formations (duet, trio, full). Each has spots: a skill, a place (pole, rope or ground),
-// a position on the diagram (0 = bottom/left, 1 = top/right) and the kid doing it. A demo uses its own copies,
-// ordered; copies stay in the library, so a pyramid planned for a demo is never lost.
+// and a position on the diagram (0 = bottom/left, 1 = top/right). Library pyramids have no kids, so they can be
+// reused anywhere; a demo uses its own ordered copies, and only those name the kid in each spot. A pyramid made
+// inside a demo gets a library twin (without kids), so it is never lost.
 
 const KINDS = new Set(['duet', 'trio', 'full']), PLACES = new Set(['pole', 'rope', 'ground']);
 const str = (v, n) => String(v ?? '').trim().slice(0, n);
@@ -15,11 +16,11 @@ async function load(env, id) {
     env.DB.prepare('SELECT p.*,d.title AS demo_title FROM pyramids p LEFT JOIN demos d ON d.id=p.demo_id WHERE p.id=?').bind(id),
     env.DB.prepare("SELECT sp.*,COALESCE(sk.name,sp.skill_name) AS skill,s.first_name||' '||COALESCE(s.last_name,'') AS student FROM pyramid_spots sp LEFT JOIN skills sk ON sk.id=sp.skill_id LEFT JOIN students s ON s.id=sp.student_id WHERE sp.pyramid_id=? ORDER BY sp.position").bind(id)
   ])).map(r => r.results);
-  return p[0] ? { ...p[0], spots } : null;
+  return p[0] ? { ...p[0], spots: p[0].demo_id ? spots : spots.map(s => ({ ...s, student_id: null, student: null })) } : null;
 }
 
 // Replaces a pyramid's spots. A typed-in new skill becomes a general skill in the library so it can be reused.
-async function spotStatements(env, id, spots) {
+async function spotStatements(env, id, spots, kids = true) {
   const st = [env.DB.prepare('DELETE FROM pyramid_spots WHERE pyramid_id=?').bind(id)], made = new Map();
   for (const [i, s] of (Array.isArray(spots) ? spots.slice(0, 40) : []).entries()) {
     const place = PLACES.has(s?.place) ? s.place : 'ground';
@@ -33,7 +34,7 @@ async function spotStatements(env, id, spots) {
       if (!found) st.push(env.DB.prepare("INSERT INTO skills(id,apparatus,name,level,description,general) VALUES(?,?,?,1,'Pyramid skill',1)").bind(skill, place === 'rope' ? 'rope' : place === 'pole' ? 'pole' : 'yoga', name));
     }
     st.push(env.DB.prepare('INSERT INTO pyramid_spots(id,pyramid_id,position,skill_id,skill_name,place,x,y,student_id) VALUES(?,?,?,?,?,?,?,?,?)')
-      .bind(crypto.randomUUID(), id, i + 1, skill, skill ? null : name || null, place, pos(s.x), pos(s.y), typeof s?.student_id === 'string' && s.student_id ? s.student_id : null));
+      .bind(crypto.randomUUID(), id, i + 1, skill, skill ? null : name || null, place, pos(s.x), pos(s.y), kids && typeof s?.student_id === 'string' && s.student_id ? s.student_id : null));
   }
   return st;
 }
@@ -45,7 +46,14 @@ export async function handlePyramids(path, method, request, env, url, actor) {
 
   if (method === 'GET' && !id) {
     const demo = url.searchParams.get('demo_id');
-    const rows = (await env.DB.prepare(`SELECT p.id,p.name,p.kind,p.apparatus,p.people,p.image_url,p.demo_id,p.sort_order,d.title AS demo_title,(SELECT COUNT(*) FROM pyramid_spots s WHERE s.pyramid_id=p.id) AS spots FROM pyramids p LEFT JOIN demos d ON d.id=p.demo_id ${demo ? 'WHERE p.demo_id=? ORDER BY p.sort_order,p.created_at' : 'ORDER BY p.kind,p.name'}`).bind(...(demo ? [demo] : [])).all()).results;
+    if (!demo) { // the library: give every pyramid that was made inside a demo a twin without kids
+      for (const { id: did } of (await env.DB.prepare('SELECT id FROM pyramids WHERE demo_id IS NOT NULL AND base_id IS NULL').all()).results) {
+        const src = await load(env, did), tid = crypto.randomUUID();
+        await env.DB.batch([env.DB.prepare('INSERT INTO pyramids(id,name,kind,apparatus,people,notes,image_url,sort_order,created_by,created_at) VALUES(?,?,?,?,?,?,?,0,?,?)').bind(tid, src.name, src.kind, app(src.apparatus), src.people, src.notes, null, src.created_by, Date.now()),
+          ...await spotStatements(env, tid, src.spots, false), env.DB.prepare('UPDATE pyramids SET base_id=? WHERE id=?').bind(tid, did)]);
+      }
+    }
+    const rows = (await env.DB.prepare(`SELECT p.id,p.name,p.kind,p.apparatus,p.people,p.image_url,p.demo_id,p.sort_order,d.title AS demo_title,(SELECT COUNT(*) FROM pyramid_spots s WHERE s.pyramid_id=p.id) AS spots FROM pyramids p LEFT JOIN demos d ON d.id=p.demo_id ${demo ? 'WHERE p.demo_id=? ORDER BY p.sort_order,p.created_at' : 'WHERE p.demo_id IS NULL ORDER BY p.kind,p.name'}`).bind(...(demo ? [demo] : [])).all()).results;
     return json(rows);
   }
   if (method === 'GET' && id) { const p = await load(env, id); return p ? json(p) : json({ error: 'Not found' }, 404); }
@@ -55,7 +63,7 @@ export async function handlePyramids(path, method, request, env, url, actor) {
     const pid = crypto.randomUUID();
     const order = body.demo_id ? (await env.DB.prepare('SELECT COALESCE(MAX(sort_order),0)+1 AS n FROM pyramids WHERE demo_id=?').bind(body.demo_id).first()).n : 0;
     await env.DB.batch([env.DB.prepare('INSERT INTO pyramids(id,name,kind,apparatus,people,notes,demo_id,sort_order,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
-      .bind(pid, name, KINDS.has(body.kind) ? body.kind : 'full', app(body.apparatus), Math.max(2, Math.min(40, Number(body.people) || 2)), str(body.notes, 2000), body.demo_id || null, order, actor.name, Date.now()), ...await spotStatements(env, pid, body.spots)]);
+      .bind(pid, name, KINDS.has(body.kind) ? body.kind : 'full', app(body.apparatus), Math.max(2, Math.min(40, Number(body.people) || 2)), str(body.notes, 2000), body.demo_id || null, order, actor.name, Date.now()), ...await spotStatements(env, pid, body.spots, !!body.demo_id)]);
     return json({ ok: true, id: pid }, 201);
   }
   // Copy a library pyramid into a demo (kids cleared, so the demo can place its own).
@@ -77,7 +85,7 @@ export async function handlePyramids(path, method, request, env, url, actor) {
     if (body.notes !== undefined) { sets.push('notes=?'); vals.push(str(body.notes, 2000)); }
     if (body.sort_order !== undefined) { sets.push('sort_order=?'); vals.push(Number(body.sort_order) || 0); }
     const st = sets.length ? [env.DB.prepare(`UPDATE pyramids SET ${sets.join(',')} WHERE id=?`).bind(...vals, id)] : [];
-    if (Array.isArray(body.spots)) st.push(...await spotStatements(env, id, body.spots));
+    if (Array.isArray(body.spots)) st.push(...await spotStatements(env, id, body.spots, !!(await env.DB.prepare('SELECT demo_id FROM pyramids WHERE id=?').bind(id).first())?.demo_id));
     if (st.length) await env.DB.batch(st);
     return json({ ok: true });
   }

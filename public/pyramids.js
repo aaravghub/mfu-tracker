@@ -26,6 +26,7 @@
     const [p, skills, students] = await Promise.all([id ? api('pyramids/' + id) : { name: '', kind: 'trio', apparatus: 'pole', people: 3, notes: '', spots: [] }, api('skills?include=general'), api('students')]);
     let apparatus = p.apparatus === 'rope' ? 'rope' : 'pole';
     const kids = students.filter(s => s.active !== 0).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+    const withKids = !!(demo || p.demo_id); // kids are named only in a demo's copy
     const demoKids = new Set((demo?.students || []).map(s => s.student_id));
     const spots = p.spots.map(s => ({ skill_id: s.skill_id || '', skill_name: s.skill_id ? '' : s.skill || '', place: s.place, x: s.x, y: s.y, student_id: s.student_id || '', student: s.student?.trim() || '' }));
     let active = -1;
@@ -49,7 +50,7 @@
         <select data-f="place">${[apparatus, 'ground'].map(k => `<option value="${k}" ${k === s.place ? 'selected' : ''}>${PLACE[k]}</option>`).join('')}</select>
         <select data-f="skill_id"><option value="">New skill…</option>${skillOpts(s.skill_id)}</select>
         <input data-f="skill_name" placeholder="New skill name" value="${esc(s.skill_name)}" ${s.skill_id ? 'hidden' : ''}>
-        <select data-f="student_id">${kidOpts(s.student_id)}</select>
+        ${withKids ? `<select data-f="student_id">${kidOpts(s.student_id)}</select>` : ''}
         <button type="button" class="icon-btn" data-rm="${i}" aria-label="Remove spot ${i + 1}">✕</button></div>`).join('') : '<p class="muted">No spots yet.</p>';
       m.$$('#pyrspots [data-f]').forEach(el => el.onchange = el.oninput = () => { const s = spots[+el.closest('[data-i]').dataset.i]; s[el.dataset.f] = el.value; if (el.dataset.f === 'skill_id' || el.dataset.f === 'place' || el.dataset.f === 'student_id') paint(); });
       m.$$('[data-pick]').forEach(b => b.onclick = () => { active = active === +b.dataset.pick ? -1 : +b.dataset.pick; paint(); });
@@ -84,7 +85,7 @@
   PAGES.pyramids = async () => {
     const all = await api('pyramids'), F = state.pyrKind ||= '';
     const list = all.filter(p => !F || p.kind === F);
-    $('#content').innerHTML = hero('Pyramids', 'Duets, trios and full pyramids with who goes where. Pyramids planned in demos land here too.', '<button class="btn" id="pynew">+ New pyramid</button>') +
+    $('#content').innerHTML = hero('Pyramids', 'Duets, trios and full pyramids: the skill in each spot and where it goes. Kids are put in when a pyramid is added to a demo.', '<button class="btn" id="pynew">+ New pyramid</button>') +
       `<div class="seg" id="pykind">${[['', 'All'], ...Object.entries(KIND)].map(([k, v]) => `<button type="button" data-k="${k}" class="${k === F ? 'active' : ''}">${v}${k ? 's' : ''}</button>`).join('')}</div>` +
       (list.length ? `<div class="pyr-grid">${list.map(p => `<button type="button" class="card pyr-card" data-open="${esc(p.id)}"><b>${esc(p.name)}</b><span class="chips"><span class="chip">${KIND[p.kind]}</span><span class="chip">${p.apparatus === 'rope' ? 'Rope' : 'Pole'}</span><span class="chip">${p.people} people</span>${p.demo_title ? `<span class="chip type-demo">${esc(p.demo_title)}</span>` : ''}</span><small class="muted">${p.spots} spot${p.spots === 1 ? '' : 's'} planned</small></button>`).join('')}</div>` : `<div class="card">${empty('', 'No pyramids yet', 'Add one, or plan one inside a demo.')}</div>`);
     $('#pynew').onclick = () => editor(null);
