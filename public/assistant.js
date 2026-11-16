@@ -11,20 +11,20 @@
     const S = new Map(students.map(s => [s.id, s])), K = new Map(skills.map(s => [s.id, s]));
     const metrics = window.mfuMetrics(), metricName = k => metrics.find(m => m[0] === k)?.[1] || k;
     const A = state.asst ||= { text: '', lang: 'en-IN', mode: 'notes', batch: '', date: todayStr() };
-    const att = A.mode === 'attendance';
+    const att = A.mode === 'attendance', ask = A.mode === 'ask';
     const batches = att ? (await api('batches')).filter(b => b.active !== 0) : [];
     if (att && !batches.some(b => b.id === A.batch)) A.batch = batches[0]?.id || '';
-    $('#content').innerHTML = hero('Coach assistant', 'Talk, type or paste what happened in class. Pause whenever you like. You check everything before it saves.') +
-      `<div class="seg" id="amode"><button type="button" data-mode="notes" class="${att ? '' : 'active'}">Class notes</button><button type="button" data-mode="attendance" class="${att ? 'active' : ''}">Attendance</button></div>
+    $('#content').innerHTML = hero('Coach assistant', ask ? 'Ask about anything in the tracker: students, classes, attendance, skills, fitness, events, demos. It can also post an announcement or schedule a demo practice once you confirm.' : 'Talk, type or paste what happened in class. Pause whenever you like. You check everything before it saves.') +
+      `<div class="seg" id="amode"><button type="button" data-mode="notes" class="${att || ask ? '' : 'active'}">Class notes</button><button type="button" data-mode="attendance" class="${att ? 'active' : ''}">Attendance</button><button type="button" data-mode="ask" class="${ask ? 'active' : ''}">Ask anything</button></div>
       <section class="card">
         ${att ? `<div class="att-bar asst-att"><label>Batch<select id="abatch">${batches.map(b => `<option value="${esc(b.id)}" ${b.id === A.batch ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label><label>Date<input type="date" id="adate" value="${esc(A.date)}"></label></div>` : ''}
         <div class="asst-bar">
           ${SR ? `<button type="button" class="btn" id="mic">Start talking</button><span class="asst-live" id="live" hidden><i></i>Listening</span>
           <label class="asst-lang">Accent<select id="lang"><option value="en-IN">English (India)</option><option value="en-US">English (US)</option></select></label>` : '<p class="muted">Voice input needs Chrome, Edge or Safari. You can still type or paste.</p>'}
         </div>
-        <textarea id="atext" rows="9" placeholder="${att ? 'e.g. Everyone is here except Riya and Dev. Anika came late. Kabir is sick. Coach Meena was here.' : 'e.g. Riya did 32 dasrang and is working on ulti bagli tedhi. Dev completed pole level 2 dive. Anika needs to work on her grip.'}">${esc(A.text)}</textarea>
+        <textarea id="atext" rows="${ask ? 3 : 9}" placeholder="${ask ? 'e.g. Who has missed the most classes this month? Who is close to pole level 3? Tell the Diwali demo kids practice is Friday at 5 at Edison.' : att ? 'e.g. Everyone is here except Riya and Dev. Anika came late. Kabir is sick. Coach Meena was here.' : 'e.g. Riya did 32 dasrang and is working on ulti bagli tedhi. Dev completed pole level 2 dive. Anika needs to work on her grip.'}">${esc(A.text)}</textarea>
         <p class="muted asst-interim" id="interim"></p>
-        <div class="modal-actions"><button type="button" class="btn secondary" id="aclear">Clear</button><button type="button" class="btn" id="areview">Review changes</button></div>
+        <div class="modal-actions"><button type="button" class="btn secondary" id="aclear">Clear</button><button type="button" class="btn" id="areview">${ask ? 'Ask' : 'Review changes'}</button></div>
       </section><div id="aresult"></div>`;
     const box = $('#atext');
     box.oninput = () => { A.text = box.value; };
@@ -57,6 +57,22 @@
     }
 
     /* ---- review: the AI proposes, the coach confirms ---- */
+    // The answer, plus anything the assistant prepared; nothing happens until the coach taps the button.
+    const answer = r => {
+      $('#aresult').innerHTML = `<section class="card section-gap"><h3>Answer</h3><p style="white-space:pre-line">${esc(r.answer)}</p>
+        ${r.actions.map((a, i) => `<div class="note"><div class="note-head"><b>${a.type === 'practice' ? 'Schedule a practice' : 'Post an announcement'}</b><small class="muted">${a.type === 'practice' ? esc(fmtShort(a.date)) + (a.start_time ? ' · ' + esc(fmtTime(a.start_time)) : '') + (a.location ? ' · ' + esc(a.location) : '') : esc(a.title)}</small></div>
+          ${a.type === 'practice' ? (a.notes ? `<p>${esc(a.notes)}</p>` : '') + '<p class="muted">Emails the kids in the demo and their families, shows in their announcements and posts in the demo chat.</p>' : `<p style="white-space:pre-line">${esc(a.body)}</p><p class="muted">Shows to all parents. No email is sent.</p>`}
+          <div class="card-actions"><button type="button" class="btn small" data-do="${i}">${a.type === 'practice' ? 'Schedule it' : 'Post it'}</button></div></div>`).join('')}
+        ${r.model ? `<small class="muted">${esc(r.model.split('/').slice(1).join('/'))} · check anything important on its own page.</small>` : ''}</section>`;
+      $$('[data-do]').forEach(b => b.onclick = async () => {
+        const a = r.actions[+b.dataset.do]; b.disabled = true;
+        try {
+          if (a.type === 'practice') { const x = await api('demos/' + a.demo_id + '/practice', { method: 'POST', body: JSON.stringify(a) }); toast(x.skipped ? 'Practice posted. Email is not connected.' : `Practice posted · ${x.emailed} emailed`); }
+          else { await api('announcements', { method: 'POST', body: JSON.stringify({ title: a.title, body: a.body, audience: 'parents' }) }); toast('Announcement posted'); }
+          b.textContent = 'Done';
+        } catch (e) { toast(e.message); b.disabled = false; }
+      });
+    };
     $('#areview').onclick = async () => {
       const text = box.value.trim(); if (!text) return toast('Say or type something first');
       $('#mic') && $('#mic').textContent === 'Pause' && $('#mic').click();
@@ -66,6 +82,12 @@
       const ask = body => api('assistant', { method: 'POST', body: JSON.stringify(body), signal: AbortSignal.timeout(25000) })
         .catch(e => { throw e.name === 'TimeoutError' || e.name === 'AbortError' ? Error('The AI took too long. Try again, or say a bit less at once.') : e; })
         .finally(() => clearInterval(tick));
+      if (A.mode === 'ask') {
+        try { answer(await ask({ mode: 'ask', text })); }
+        catch (e) { $('#aresult').innerHTML = `<section class="card section-gap"><p class="error">${esc(e.message)}</p></section>`; }
+        finally { btn.disabled = false; }
+        return;
+      }
       if (att) {
         try { await reviewAttendance(await ask({ mode: 'attendance', text, batch_id: A.batch })); }
         catch (e) { $('#aresult').innerHTML = `<section class="card section-gap"><p class="error">${esc(e.message)}</p><p class="muted">You can still take attendance on the Attendance page.</p></section>`; }

@@ -49,3 +49,20 @@ test('a whole batch minus one becomes one action per student, with real ids', ()
   assert.deepEqual(r.actions.map(a => a.student + ':' + (a.skill || a.metric)), ['uuid-a:skill-x', 'uuid-c:skill-x', 'uuid-c:dasrang_1min']);
   assert.equal(r.actions[0].batch, undefined);
 });
+
+test('ask mode keeps only real, well-formed actions', async () => {
+  const { validateAsk, shortCodes } = await import('../functions/_lib/ai.js');
+  const codes = shortCodes('d', [{ id: 'demo-a' }]);
+  const r = validateAsk({ answer: ' Done. ', actions: [
+    { type: 'practice', demo: 'd1', date: '2026-11-20', start_time: '17:00', end_time: 'late', location: 'Edison' },
+    { type: 'practice', demo: 'd9', date: '2026-11-20' },          // unknown demo
+    { type: 'practice', demo: 'd1', date: 'Friday' },               // not a date
+    { type: 'announcement', title: 'No class Monday', body: 'Holiday.' },
+    { type: 'delete_student', student: 's1' }                        // not something it may do
+  ] }, codes);
+  assert.equal(r.answer, 'Done.');
+  assert.deepEqual(r.actions, [
+    { type: 'practice', demo_id: 'demo-a', date: '2026-11-20', start_time: '17:00', end_time: '', location: 'Edison', notes: '' },
+    { type: 'announcement', title: 'No class Monday', body: 'Holiday.' }
+  ]);
+});

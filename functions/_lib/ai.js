@@ -149,6 +149,90 @@ For several students, use "students":["s1","s2"] instead of "student". For a who
 
 const CHECK = `You double-check an assistant. Given a coach's words and the actions it proposed, list the actions the words do not clearly support (wrong student, wrong skill, wrong number, wrong status) and anything the coach clearly asked for that is missing. Return only JSON: {"wrong":[{"index":<number>,"why":"..."}],"missing":["..."]}.`;
 
+// ---- Ask anything: the whole tracker as compact text, and a free model answers from it ----
+const ASK_PROMPT = `You are the assistant inside MFU Tracker, used by Mallakhamb coaches. Answer the coach's question using only the data below. Be short and specific: names, numbers, dates. Plain sentences or a short list, no markdown symbols. If the data does not have the answer, say so; never guess or invent people, dates or numbers. Names may be misheard by speech recognition; match them to the closest name in the data.
+Return only JSON: {"answer":"...","actions":[...]}. "actions" is empty unless the coach asks you to DO one of these two things:
+- {"type":"announcement","title":"...","body":"..."}  (post an announcement to parents)
+- {"type":"practice","demo":"<demo code like d1>","date":"YYYY-MM-DD","start_time":"HH:MM","end_time":"HH:MM","location":"...","notes":"..."}  (schedule a practice for a demo; work out the date from today's date)
+The coach confirms every action before it happens, so say in "answer" what you prepared. You cannot do anything else; for other changes, say which page to use.`;
+
+// One query at a time so a missing table or column loses only its own section, never the whole answer.
+const rowsOf = async (env, sql) => { try { return (await env.DB.prepare(sql).all()).results; } catch { return []; } };
+
+export async function snapshot(env) {
+  const [centers, coaches, batches, bs, bc, students, links, att, absent, prog, learning, fit, notes, events, demos, ds, practices, meetings, reqs, anns, scores, spots] = await Promise.all([
+    'SELECT id,name FROM centers',
+    'SELECT id,name,center_id FROM coaches WHERE COALESCE(active,1)=1',
+    'SELECT id,name,days,start_time,center_id FROM batches WHERE COALESCE(active,1)=1',
+    'SELECT batch_id,student_id FROM batch_students',
+    'SELECT batch_id,coach_id FROM batch_coaches',
+    'SELECT id,first_name,last_name,center_id,pole_level,rope_level,yoga_level,parent_name,gender FROM students WHERE COALESCE(active,1)=1 ORDER BY first_name,last_name',
+    "SELECT ps.student_id,p.name FROM parent_students ps JOIN parents p ON p.id=ps.parent_id WHERE COALESCE(p.name,'')<>''",
+    "SELECT student_id,status,COUNT(*) AS n FROM student_attendance WHERE attendance_date>=date('now','-60 days') GROUP BY student_id,status",
+    "SELECT student_id,MAX(attendance_date) AS d FROM student_attendance WHERE status='absent' GROUP BY student_id",
+    "SELECT student_id,COUNT(*) AS n FROM student_skill_progress WHERE status='mastered' GROUP BY student_id",
+    "SELECT p.student_id,k.name FROM student_skill_progress p JOIN skills k ON k.id=p.skill_id WHERE p.status='learning'",
+    'SELECT f.student_id,f.metric,f.value,f.record_date FROM fitness_records f JOIN (SELECT student_id,metric,MAX(record_date) AS d FROM fitness_records GROUP BY student_id,metric) m ON m.student_id=f.student_id AND m.metric=f.metric AND m.d=f.record_date',
+    "SELECT n.created_at,n.worked_on,n.next_steps,n.author_name,s.first_name||' '||COALESCE(s.last_name,'') AS student FROM student_notes n JOIN students s ON s.id=n.student_id ORDER BY n.created_at DESC LIMIT 40",
+    "SELECT title,event_type,event_date,event_time,location FROM events WHERE event_date>=date('now','-30 days') ORDER BY event_date LIMIT 60",
+    "SELECT id,title,demo_date,start_time,arrive_time,location FROM demos WHERE demo_date>=date('now','-30 days') ORDER BY demo_date LIMIT 30",
+    'SELECT demo_id,student_id FROM demo_students',
+    "SELECT title,practice_date,start_time,end_time,location FROM practices WHERE practice_date>=date('now','-1 day') ORDER BY practice_date LIMIT 40",
+    "SELECT title,meeting_date,start_time,location FROM meetings WHERE meeting_date>=date('now','-1 day') ORDER BY meeting_date LIMIT 40",
+    "SELECT r.kind,r.subject,r.status,r.created_at,p.name AS parent,s.first_name||' '||COALESCE(s.last_name,'') AS student FROM parent_requests r LEFT JOIN parents p ON p.id=r.parent_id LEFT JOIN students s ON s.id=r.student_id WHERE COALESCE(r.status,'open')<>'closed' ORDER BY r.created_at DESC LIMIT 40",
+    'SELECT title,body,created_at FROM announcements ORDER BY created_at DESC LIMIT 12',
+    "SELECT e.title,e.event_date,c.apparatus,c.score,s.first_name||' '||COALESCE(s.last_name,'') AS student FROM comp_scores c JOIN events e ON e.id=c.event_id JOIN students s ON s.id=c.student_id ORDER BY e.event_date DESC LIMIT 300",
+    "SELECT py.demo_id,py.name AS pyramid,COALESCE(k.name,sp.skill_name) AS skill,s.first_name||' '||COALESCE(s.last_name,'') AS student FROM pyramid_spots sp JOIN pyramids py ON py.id=sp.pyramid_id LEFT JOIN skills k ON k.id=sp.skill_id LEFT JOIN students s ON s.id=sp.student_id WHERE py.demo_id IS NOT NULL ORDER BY py.sort_order,sp.position"
+  ].map(q => rowsOf(env, q)));
+  const by = (rows, key) => { const m = new Map(); for (const r of rows) (m.get(r[key]) || m.set(r[key], []).get(r[key])).push(r); return m; };
+  const cn = new Map(centers.map(c => [c.id, c.name])), sn = new Map(students.map(s => [s.id, s.first_name + ' ' + (s.last_name || '')])), bn = new Map(batches.map(b => [b.id, b.name])), kn = new Map(coaches.map(c => [c.id, c.name]));
+  const sb = by(bs, 'student_id'), bsB = by(bs, 'batch_id'), bcB = by(bc, 'batch_id'), pl = by(links, 'student_id'), at = by(att, 'student_id'), lr = by(learning, 'student_id'), ft = by(fit, 'student_id'), dsD = by(ds, 'demo_id'), spD = by(spots, 'demo_id');
+  const ab = new Map(absent.map(r => [r.student_id, r.d])), ms = new Map(prog.map(r => [r.student_id, r.n]));
+  const demoCodes = shortCodes('d', demos), cut = (v, n) => String(v || '').replace(/\s+/g, ' ').slice(0, n);
+  const text = [
+    'Today: ' + new Date().toISOString().slice(0, 10) + ' (' + new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }) + ')',
+    'Centers: ' + centers.map(c => c.name).join(', '),
+    'Coaches (name|center|batches):\n' + coaches.map(c => `${c.name}|${cn.get(c.center_id) || ''}|${bc.filter(x => x.coach_id === c.id).map(x => bn.get(x.batch_id)).filter(Boolean).join(', ')}`).join('\n'),
+    'Batches (name|center|days|start|coaches|number of students):\n' + batches.map(b => `${b.name}|${cn.get(b.center_id) || ''}|${b.days || ''}|${b.start_time || ''}|${(bcB.get(b.id) || []).map(x => kn.get(x.coach_id)).filter(Boolean).join(', ')}|${(bsB.get(b.id) || []).length}`).join('\n'),
+    'Students (name|center|levels pole/rope/yoga|batches|parents|attendance last 60 days present/late/absent/excused|last absent|skills mastered|skills being learned|latest fitness):\n' + students.map(s => {
+      const a = Object.fromEntries((at.get(s.id) || []).map(r => [r.status, r.n]));
+      return [sn.get(s.id), cn.get(s.center_id) || '', `${s.pole_level}/${s.rope_level}/${s.yoga_level}`, (sb.get(s.id) || []).map(x => bn.get(x.batch_id)).filter(Boolean).join(', '),
+        [...new Set([s.parent_name, ...(pl.get(s.id) || []).map(x => x.name)].filter(Boolean))].join(', '), `${a.present || 0}/${a.late || 0}/${a.absent || 0}/${a.excused || 0}`, ab.get(s.id) || '', ms.get(s.id) || 0,
+        (lr.get(s.id) || []).slice(0, 6).map(x => x.name).join(', '), (ft.get(s.id) || []).map(f => `${f.metric}=${f.value}`).join(' ')].join('|');
+    }).join('\n'),
+    'Events (date|type|title|time|place):\n' + events.map(e => `${e.event_date}|${e.event_type}|${e.title}|${e.event_time || ''}|${e.location || ''}`).join('\n'),
+    'Demos (code|date|title|start|arrive by|place|kids in it):\n' + demos.map(d => `${demoCodes.to.get(d.id)}|${d.demo_date}|${d.title}|${d.start_time || ''}|${d.arrive_time || ''}|${d.location || ''}|${(dsD.get(d.id) || []).map(x => sn.get(x.student_id)).filter(Boolean).join(', ')}`).join('\n'),
+    'Demo pyramids (demo code|pyramid|spots as kid: skill):\n' + demos.filter(d => spD.has(d.id)).flatMap(d => [...by(spD.get(d.id), 'pyramid')].map(([name, sp]) => `${demoCodes.to.get(d.id)}|${name}|${sp.map(x => (x.student?.trim() || 'open') + ': ' + (x.skill || '?')).join('; ')}`)).join('\n'),
+    'Practices (date|title|time|place):\n' + practices.map(p => `${p.practice_date}|${p.title}|${p.start_time || ''}${p.end_time ? '-' + p.end_time : ''}|${p.location || ''}`).join('\n'),
+    'Meetings (date|title|time|place):\n' + meetings.map(m => `${m.meeting_date}|${m.title}|${m.start_time || ''}|${m.location || ''}`).join('\n'),
+    'Open parent requests (date|kind|parent|student|subject):\n' + reqs.map(r => `${cut(r.created_at, 10)}|${r.kind || ''}|${r.parent || ''}|${r.student || ''}|${cut(r.subject, 100)}`).join('\n'),
+    'Recent coach notes (date|student|worked on|next steps|by):\n' + notes.map(n => `${cut(n.created_at, 10)}|${n.student}|${cut(n.worked_on, 140)}|${cut(n.next_steps, 140)}|${n.author_name || ''}`).join('\n'),
+    'Recent announcements (date|title|text):\n' + anns.map(a => `${cut(a.created_at, 10)}|${a.title}|${cut(a.body, 160)}`).join('\n'),
+    'Competition scores (date|event|student|apparatus|score):\n' + scores.map(c => `${c.event_date}|${c.title}|${c.student}|${c.apparatus}|${c.score}`).join('\n')
+  ].join('\n\n');
+  return { text, demoCodes };
+}
+
+// Keeps only actions the app can really do, with clean values.
+export function validateAsk(raw, demoCodes) {
+  const str = (v, n) => String(v ?? '').trim().slice(0, n), time = v => /^\d{2}:\d{2}$/.test(v || '') ? v : '';
+  const actions = [];
+  for (const a of (Array.isArray(raw?.actions) ? raw.actions : []).slice(0, 5)) {
+    if (a?.type === 'announcement' && str(a.title, 200)) actions.push({ type: 'announcement', title: str(a.title, 200), body: str(a.body, 6000) });
+    else if (a?.type === 'practice' && demoCodes.from.has(a.demo) && /^\d{4}-\d{2}-\d{2}$/.test(a.date || '')) actions.push({ type: 'practice', demo_id: demoCodes.from.get(a.demo), date: a.date, start_time: time(a.start_time), end_time: time(a.end_time), location: str(a.location, 200), notes: str(a.notes, 2000) });
+  }
+  return { answer: str(raw?.answer, 6000), actions };
+}
+
+async function askEverything(env, text) {
+  const { text: data, demoCodes } = await snapshot(env);
+  const r = await askFree(env, [{ role: 'system', content: ASK_PROMPT + '\n\nDATA\n' + data }, { role: 'user', content: text }]);
+  if (!r.data) return json({ error: 'No free AI model answered in time. ' + r.tried.join(' · '), tried: r.tried }, 503);
+  const out = validateAsk(r.data, demoCodes);
+  if (!out.answer && !out.actions.length) return json({ error: 'The assistant gave an empty answer. Try asking again in other words.' }, 502);
+  return json({ ...out, model: r.model });
+}
+
 export async function handleAssistant(path, method, request, env) {
   if (path !== 'assistant' || method !== 'POST') return null;
   if (!env.OPENROUTER_API_KEY && !env.GROQ_API_KEY && !env.GEMINI_API_KEY) return json({ error: 'The AI assistant needs a free OPENROUTER_API_KEY (or GROQ_API_KEY / GEMINI_API_KEY) secret in Cloudflare.', setup: true }, 503);
@@ -156,6 +240,7 @@ export async function handleAssistant(path, method, request, env) {
   const text = String(body?.text || '').trim().slice(0, 20000);
   if (!text) return json({ error: 'Say or type something first.' }, 400);
   if (body.mode === 'attendance') return attendanceFromWords(env, text, body);
+  if (body.mode === 'ask') return askEverything(env, text);
   const metrics = (Array.isArray(body.metrics) ? body.metrics : []).filter(m => Array.isArray(m) && /^[a-z0-9_]{1,40}$/.test(m[0])).slice(0, 60);
   const deadline = Date.now() + 20000;
   const [students, skills, batches, members] = (await env.DB.batch([
