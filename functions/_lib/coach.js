@@ -2,7 +2,7 @@ import { json, cleanEmail, isEmail, checkPassword, makePassword, sha256, randomH
 import { getSession, startSession } from './auth.js';
 import { mailConfigured, sendMessages, siteUrl, wrap } from './mail.js';
 
-const COACH_SESSION_SECONDS = 7 * 24 * 3600;
+const COACH_SESSION_SECONDS = 30 * 24 * 3600;
 const TOKEN_SECONDS = 7 * 24 * 3600;
 
 export async function createCoachSetupLink(env, request, coachId) {

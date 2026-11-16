@@ -6,7 +6,7 @@ import { sendMessages, wrap } from './mail.js';
 // Either way the account must already exist (MFU creates parent and coach accounts; new families use Sign up).
 // Someone who signs in this way and has no password is asked to set one, so the same email also works with a password.
 
-const SESSION = { parent: 7 * 24 * 3600, coach: 7 * 24 * 3600, student: 7 * 24 * 3600, admin: 43200 };
+const SESSION = { parent: 90 * 24 * 3600, coach: 30 * 24 * 3600, student: 90 * 24 * 3600, admin: 43200 };
 const CODE_SECONDS = 600, CODE_TRIES = 5;
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -75,6 +75,16 @@ export async function handleSignin(path, method, request, env) {
     await clearFails(env, 'code:' + email + ':' + clientKey(request));
     const acc = await account(env, role, email);
     return acc ? signIn(env, role, acc) : json({ error: 'No account for that email.' }, 404);
+  }
+
+  // One-tap link from an email: signs the parent in. Works until it expires, so mail apps that open links early do not use it up.
+  if (sub === 'link' && method === 'POST') {
+    const key = 'link:' + clientKey(request);
+    if (await isBlocked(env, key)) return json({ error: 'Too many tries. Wait 15 minutes, or sign in with your email.' }, 429);
+    const row = /^[a-f0-9]{64}$/.test(body.token || '') ? await env.DB.prepare('SELECT parent_id FROM magic_links WHERE token_hash=? AND expires_at>?').bind(await sha256(body.token), now()).first() : null;
+    const acc = row && await env.DB.prepare('SELECT id,name,1 AS has_password FROM parents WHERE id=? AND COALESCE(active,1)=1').bind(row.parent_id).first();
+    if (!acc) { await recordFail(env, key); return json({ error: 'This link has expired. Sign in with your email instead.' }, 400); }
+    return signIn(env, 'parent', acc);
   }
 
   if (sub === 'google' && method === 'POST') {

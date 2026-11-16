@@ -6,7 +6,7 @@ import { savePhoto } from './photos.js';
 // Student accounts: a student signs up, MFU links the request to their student record, then they sign in and see
 // the same portal parents see, about themselves only.
 
-const SESSION_SECONDS = 7 * 24 * 3600;
+const SESSION_SECONDS = 90 * 24 * 3600;
 
 export async function handleStudent(path, method, request, env) {
   if (!path.startsWith('student/')) return null;

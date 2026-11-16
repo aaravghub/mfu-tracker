@@ -66,3 +66,34 @@ test('ask mode keeps only real, well-formed actions', async () => {
     { type: 'announcement', title: 'No class Monday', body: 'Holiday.' }
   ]);
 });
+
+test('weekly email: week starts Sunday morning US time; empty weeks send nothing', async () => {
+  const { weekKey, buildDigest } = await import('../functions/_lib/digest.js');
+  assert.equal(weekKey(Date.parse('2026-11-15T14:59:00Z')), '2026-11-08'); // Sunday, before 15:00 UTC: still last week
+  assert.equal(weekKey(Date.parse('2026-11-15T15:00:00Z')), '2026-11-15');
+  assert.equal(weekKey(Date.parse('2026-11-21T23:00:00Z')), '2026-11-15'); // Saturday
+  const kid = { first_name: 'Riya', attendance: {}, mastered: [], notes: [] };
+  assert.equal(buildDigest({ email: 'p@example.com', name: 'Meena Shah' }, [kid], 'https://x.test'), null);
+  const m = buildDigest({ email: 'p@example.com', name: 'Meena Shah', upcoming: [] }, [{ ...kid, attendance: { present: 2, absent: 1 }, mastered: ['Bagli <b>'] }], 'https://x.test');
+  assert.equal(m.subject, "Riya's week at MFU");
+  assert.match(m.text, /Came to 2 of 3 classes this week \(1 missed\)/);
+  assert.match(m.html, /Bagli &lt;b&gt;/); // names are escaped
+});
+
+test('one-tap links: only a parent gets a personal link, and only the bare site link changes', async () => {
+  const { oneTap } = await import('../functions/_lib/mail.js');
+  const saved = [];
+  const env = { SITE_URL: 'https://mfu.example', DB: {
+    prepare: sql => ({ sql, bind: (...b) => ({ sql, b }), all: async () => ({ results: [{ id: 'p1', e: 'mom@example.com' }] }) }),
+    batch: async st => { saved.push(...st.filter(s => s.sql.startsWith('INSERT'))); }
+  } };
+  const html = '<a href="https://mfu.example">Open</a> <a href="https://mfu.example/#setup=abc">Set password</a> <a href="https://mfu-tracker.pages.dev/">Site</a> <a href="https://mfu.example.evil.com">x</a>';
+  const [mom, coach] = await oneTap(env, [{ to: 'Mom@Example.com', html, text: 'Open: https://mfu.example' }, { to: 'coach@example.com', html, text: '' }]);
+  const token = /#go=([a-f0-9]{64})/.exec(mom.html)[1];
+  assert.equal(mom.html, `<a href="https://mfu.example/#go=${token}">Open</a> <a href="https://mfu.example/#setup=abc">Set password</a> <a href="https://mfu-tracker.pages.dev/#go=${token}">Site</a> <a href="https://mfu.example.evil.com">x</a>`);
+  assert.equal(mom.text, 'Open: https://mfu.example/#go=' + token);
+  assert.equal(coach.html, html);                       // not a parent: untouched
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].b[1], 'p1');
+  assert.notEqual(saved[0].b[0], token);                // only the hash is stored
+});

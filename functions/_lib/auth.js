@@ -10,7 +10,9 @@ export function readToken(request) {
 }
 
 // Signed-in sessions end after 20 minutes without any activity.
-export const IDLE_SECONDS = 20 * 60;
+// Only the admin is signed out for sitting idle. Parents, students and coaches stay signed in until the session itself ends,
+// so a phone that was put away for an hour does not ask them to sign in again.
+export const IDLE_SECONDS = 2 * 3600;
 
 export async function getSession(request, env) {
   const token = readToken(request);
@@ -18,7 +20,7 @@ export async function getSession(request, env) {
   const hash = await sha256(token), now = Math.floor(Date.now() / 1000);
   const row = await env.DB.prepare('SELECT role,student_id,parent_id,coach_id,expires_at,last_seen FROM sessions WHERE token_hash=?').bind(hash).first();
   if (!row || row.expires_at < now) return null;
-  if (row.last_seen && now - row.last_seen > IDLE_SECONDS) { await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(hash).run(); return null; }
+  if (row.role === 'admin' && row.last_seen && now - row.last_seen > IDLE_SECONDS) { await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(hash).run(); return null; }
   // Only write when a minute has passed, so normal browsing doesn't write on every request.
   if (!row.last_seen || now - row.last_seen > 60) await env.DB.prepare('UPDATE sessions SET last_seen=? WHERE token_hash=?').bind(now, hash).run();
   return row;

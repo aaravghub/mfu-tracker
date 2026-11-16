@@ -14,6 +14,7 @@ const STATEMENTS = [
   // Coach accounts, meetings, demos, evaluations, competitions, notes, fitness, photos, requests, announcements.
   `CREATE TABLE IF NOT EXISTS coach_centers (coach_id TEXT NOT NULL REFERENCES coaches(id) ON DELETE CASCADE, center_id TEXT NOT NULL REFERENCES centers(id) ON DELETE CASCADE, PRIMARY KEY(coach_id,center_id))`,
   `CREATE TABLE IF NOT EXISTS practices (id TEXT PRIMARY KEY, demo_id TEXT REFERENCES demos(id) ON DELETE CASCADE, title TEXT NOT NULL, practice_date TEXT NOT NULL, start_time TEXT, end_time TEXT, location TEXT, notes TEXT, created_by TEXT)`,
+  `CREATE TABLE IF NOT EXISTS magic_links (token_hash TEXT PRIMARY KEY, parent_id TEXT NOT NULL, expires_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS coach_invites (token_hash TEXT PRIMARY KEY, created_by TEXT, expires_at INTEGER NOT NULL, used_at INTEGER, coach_id TEXT)`,
   `CREATE TABLE IF NOT EXISTS coach_password_tokens (token_hash TEXT PRIMARY KEY, coach_id TEXT NOT NULL REFERENCES coaches(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS meetings (id TEXT PRIMARY KEY, title TEXT NOT NULL, meeting_date TEXT NOT NULL, start_time TEXT, end_time TEXT, location TEXT, description TEXT DEFAULT '', meet_url TEXT, calendar_event_id TEXT, calendar_url TEXT, attendees TEXT DEFAULT '[]', request_id TEXT, created_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
@@ -96,7 +97,9 @@ const COLUMNS = [
   ['students', 'password_salt', 'TEXT'],
   ['students', 'last_login', 'TEXT'],
   ['students', 'tour_done', 'INTEGER DEFAULT 0'],
-  ['announcements', 'demo_id', 'TEXT']
+  ['announcements', 'demo_id', 'TEXT'],
+  ['parents', 'digest_week', 'TEXT'],
+  ['parents', 'digest_off', 'INTEGER DEFAULT 0']
 ];
 
 // D1 bills every row a query scans. These let lookups by student, date or coach read only the matching rows.
@@ -135,7 +138,7 @@ const INDEXES = [
 ];
 
 // Bump when STATEMENTS, COLUMNS or INDEXES change. A cold start then costs one read instead of ~90 queries.
-const SCHEMA_VERSION = '2026-11-15.3';
+const SCHEMA_VERSION = '2026-11-16.1';
 
 // The original sessions table only allowed admin and parent roles. Rebuild it once so coach sessions fit, keeping everyone signed in.
 async function upgradeSessions(env) {

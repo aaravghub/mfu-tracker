@@ -49,8 +49,36 @@ const headerSafe = s => String(s || '').replace(/[\r\n]/g, ' ').replace(/[^\x20-
 // One email gets a normal Cc. A send to many parents copies the address once, with the list of who got it, instead of hundreds of copies.
 const ccAddress = env => (env.MAIL_CC === undefined ? 'info@msquarefit.com' : String(env.MAIL_CC)).trim().toLowerCase();
 
-export async function sendMessages(env, messages, { cc = true } = {}) {
+// One-tap sign-in: in an email to a parent, the plain link to the site becomes a personal link that opens it already
+// signed in (30 days). Links with a path (password setup, forms) are left alone.
+// shortcut: only the SITE_URL and pages.dev addresses are recognised; add a custom domain here if one is ever used.
+const LINK_SECONDS = 30 * 24 * 3600;
+export async function oneTap(env, messages) {
+  const sites = [...new Set([String(env.SITE_URL || '').trim().replace(/\/+$/, ''), 'https://mfu-tracker.pages.dev'].filter(u => /^https?:\/\/[^/]+$/.test(u)))];
+  const bare = new RegExp('(' + sites.map(u => u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')/?(?![\\w#/?.:-])', 'g');
+  const has = new RegExp(bare.source); // not global: a global regex remembers its place between tests
+  if (!messages.some(m => has.test(m.html || '') || has.test(m.text || ''))) return messages;
+  try {
+    const parents = new Map((await env.DB.prepare('SELECT id,lower(email) AS e FROM parents WHERE COALESCE(active,1)=1').all()).results.map(p => [p.e, p.id]));
+    const now = Math.floor(Date.now() / 1000), st = [env.DB.prepare('DELETE FROM magic_links WHERE expires_at<?').bind(now)];
+    const out = [];
+    for (const m of messages) {
+      const pid = parents.get(String(m.to).trim().toLowerCase());
+      if (!pid) { out.push(m); continue; }
+      const token = [...crypto.getRandomValues(new Uint8Array(32))].map(b => b.toString(16).padStart(2, '0')).join('');
+      const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token)))].map(b => b.toString(16).padStart(2, '0')).join('');
+      st.push(env.DB.prepare('INSERT INTO magic_links(token_hash,parent_id,expires_at) VALUES(?,?,?)').bind(hash, pid, now + LINK_SECONDS));
+      const swap = s => String(s || '').replace(bare, (_, site) => site + '/#go=' + token);
+      out.push({ ...m, html: swap(m.html), text: swap(m.text) });
+    }
+    for (let i = 0; i < st.length; i += 50) await env.DB.batch(st.slice(i, i + 50));
+    return out;
+  } catch { return messages; } // a problem making links must never stop the email itself
+}
+
+export async function sendMessages(env, messages, { cc = true, links = true } = {}) {
   let sent = 0, failed = 0, error = '';
+  const original = messages; // the copy for the CC address must not carry a parent's personal link
   const ccTo = cc && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ccAddress(env)) ? ccAddress(env) : '', single = messages.length === 1;
   if (!mailConfigured(env)) return { sent: 0, failed: messages.length, error: 'Gmail is not configured. Add the Google OAuth secrets in Cloudflare Pages.' };
   // A send to more than 20 people starts this button's 10-minute cooldown (see the API router).
@@ -58,6 +86,7 @@ export async function sendMessages(env, messages, { cc = true } = {}) {
   let token;
   try { token = await googleAccessToken(env); }
   catch (e) { return { sent: 0, failed: messages.length, error: String(e.message || 'Gmail authorization failed.') }; }
+  if (links) messages = await oneTap(env, messages);
   for (const m of messages) {
     try {
       const boundary = 'mfu_' + crypto.randomUUID().replace(/-/g, '');
@@ -97,10 +126,10 @@ export async function sendMessages(env, messages, { cc = true } = {}) {
   }
   // Bulk send: one copy for the CC address, listing everyone it went to.
   if (!single && ccTo && sent) {
-    const first = messages[0], list = messages.map(m => m.to).join(', ');
+    const first = original[0], list = messages.map(m => m.to).join(', ');
     await sendMessages(env, [{ to: ccTo, subject: '[Copy] ' + first.subject + ` (sent to ${messages.length})`,
       html: `<div style="font:13px system-ui;background:#fff8e1;border:1px solid #f1d58a;border-radius:8px;padding:10px 12px;margin:0 0 12px">Copy of an email MFU Tracker sent to ${messages.length} people (${sent} delivered${failed ? ', ' + failed + ' failed' : ''}): ${esc(list)}</div>` + (first.html || ''),
-      text: `Copy of an email sent to ${messages.length} people: ${list}\n\n` + (first.text || '') }], { cc: false });
+      text: `Copy of an email sent to ${messages.length} people: ${list}\n\n` + (first.text || '') }], { cc: false, links: false });
   }
   return { sent, failed, error };
 }

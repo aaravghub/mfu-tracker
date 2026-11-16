@@ -6,7 +6,7 @@ import { parentExtras, handleParentFeatures } from './features.js';
 import { parentForms, handleParentForms } from './forms.js';
 import { savePhoto } from './photos.js';
 
-const PARENT_SESSION_SECONDS = 7 * 24 * 3600;
+const PARENT_SESSION_SECONDS = 90 * 24 * 3600;
 const TOKEN_SECONDS = 7 * 24 * 3600;
 
 // Creates a one-time "set your password" link for a parent.
@@ -100,7 +100,7 @@ export async function handleParent(path, method, request, env) {
   // Everything below needs a parent session.
   const s = await getSession(request, env);
   if (!s || s.role !== 'parent' || !s.parent_id) return json({ error: 'Please sign in.' }, 401);
-  const parent = await env.DB.prepare('SELECT id,email,name FROM parents WHERE id=? AND COALESCE(active,1)=1').bind(s.parent_id).first();
+  const parent = await env.DB.prepare('SELECT id,email,name,COALESCE(digest_off,0) AS digest_off FROM parents WHERE id=? AND COALESCE(active,1)=1').bind(s.parent_id).first();
   if (!parent) { await endSession(request, env); return json({ error: 'Please sign in.' }, 401); }
 
   if (sub === 'password' && method === 'POST') {
@@ -152,6 +152,7 @@ export async function handleParent(path, method, request, env) {
     return json({ ok: true });
   }
 
+  if (sub === 'digest' && method === 'POST') { await env.DB.prepare('UPDATE parents SET digest_off=? WHERE id=?').bind(body.on ? 0 : 1, parent.id).run(); return json({ ok: true }); }
   if (sub === 'home' && method === 'GET') return json(await portalBody(env, parent, await childrenFor(env, parent.id)));
 
   { const f = await handleParentFeatures(sub, method, body, env, request, parent); if (f) return f; }

@@ -17,16 +17,21 @@ import { handleChat, handleChatMessage } from '../_lib/chat.js';
 import { handlePyramids, handleLineup } from '../_lib/pyramids.js';
 import { handleSignin } from '../_lib/signin.js';
 import { handleStudent, handleStudentRequests } from '../_lib/student.js';
+import { handleDigest, maybeSendDigest } from '../_lib/digest.js';
+import { siteUrl } from '../_lib/mail.js';
+import { adminEmail } from '../_lib/features.js';
 // Coaches can do everything the admin can except manage coach and parent accounts.
-const adminOnly = (path, method) => { const [root] = path.split('/'); return root === 'coach-accounts' || root === 'signups' || (root === 'parents' && method !== 'GET') || (root === 'coaches' && method !== 'GET'); };
+const adminOnly = (path, method) => { const [root] = path.split('/'); return root === 'coach-accounts' || root === 'signups' || root === 'digest' || (root === 'parents' && method !== 'GET') || (root === 'coaches' && method !== 'GET'); };
 // One random code per database, made on first use.
 const noticeCode=async env=>{await env.DB.prepare("INSERT OR IGNORE INTO schema_meta(k,v) VALUES('notice_override',?)").bind(crypto.randomUUID().replace(/-/g,'')+crypto.randomUUID().replace(/-/g,'')).run();return (await env.DB.prepare("SELECT v FROM schema_meta WHERE k='notice_override'").first()).v};
 const TABLES = new Set(['students','coaches','batches','skills','events','routines','student_attendance','coach_attendance','links','shop_items']);
 const URL_FIELDS = new Set(['url','signup_url','photo_url','video_url','image_url']);
-export async function onRequest({request,env,params}){
+export async function onRequest({request,env,params,waitUntil}){
  if(!env.DB)return json({error:'Cloudflare D1 binding DB is missing. Configure it in Pages settings.'},500);
  const raw=params.path||'';const path=(Array.isArray(raw)?raw.join('/'):String(raw)).replace(/^\/+|\/+$/g,'');const method=request.method;const url=new URL(request.url);
  await ensureSchema(env);
+ // The weekly parent email rides along with visits (Pages has no scheduler); it never slows this request down.
+ waitUntil(maybeSendDigest(env,siteUrl(env,request)).catch(()=>{}));
 
  // Google OAuth setup: start requires an admin session; callback is protected by one-time state.
  if(path==='auth/google/start'&&method==='GET'){
@@ -83,6 +88,7 @@ export async function onRequest({request,env,params}){
  // confirms (x-bypass-cooldown). Checked before the button does anything, so nothing is half-done. Evaluations are exempt.
  if((method==='POST'||method==='PUT')&&!path.startsWith('evaluations')){const last=Number((await env.DB.prepare('SELECT v FROM schema_meta WHERE k=?').bind('mailcd:'+path).first())?.v||0),wait=last+600-Math.floor(Date.now()/1000);if(wait>0&&request.headers.get('x-bypass-cooldown')!=='1')return json({error:'This button emailed more than 20 people less than 10 minutes ago.',cooldown:true,wait},429);env={...env,MAIL_GUARD:path}}
  if(path==='coach-accounts'||path.startsWith('coach-accounts/'))return handleCoachAccounts(path,method,request,env);
+ { const dg=await handleDigest(path,method,request,env,siteUrl(env,request),adminEmail(env));if(dg)return dg }
  if(path==='signups'||path.startsWith('signups/'))return handleSignupReview(path,method,request,env,actor);
  { const v=await handleVideo(path,method,request,env,actor);if(v)return v }
  { const sr=await handleStudentRequests(path,method,request,env);if(sr)return sr }

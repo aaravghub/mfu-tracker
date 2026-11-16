@@ -130,6 +130,12 @@ async function checkAuth() {
   if (inv && window.coachInviteView) return coachInviteView(inv[1]);
   const m = /^#(coach-)?setup=([a-f0-9]{64})$/.exec(location.hash);
   if (m) return setupView(m[2], m[1] ? 'coach' : 'parent');
+  // A one-tap link from an email (#go=...): sign in with it, then carry on as usual.
+  const go = /^#go=([a-f0-9]{64})$/.exec(location.hash);
+  if (go) {
+    history.replaceState(null, '', location.pathname); // the link does not stay in the address bar or history
+    try { await api('signin/link', { method: 'POST', body: JSON.stringify({ token: go[1] }) }); } catch (e) { setTimeout(() => toast(e.message), 600); }
+  }
   // Ask who is signed in first, so people already signed in never see (or load) the sign-in page.
   let me = null; try { me = await api('me'); } catch { /* show sign-in */ }
   if (me?.authenticated) { setRole(me.role, me); return show(startPage(me.role)); }
