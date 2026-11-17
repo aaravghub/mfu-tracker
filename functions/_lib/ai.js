@@ -145,12 +145,16 @@ Actions (use the short codes from the lists):
 - {"type":"skill","student":"s1","skill":"k1","status":"learning"|"mastered","heard":"<the words this came from>"}  (working on, started, practising = learning; got it, learned, mastered, completed, can do = mastered)
 - {"type":"count","student":"s1","metric":"<test key>","value":<number>,"heard":"..."}  (e.g. "Riya did 32 dasrang" = dasrang_1min 32; seconds for holds)
 - {"type":"note","student":"s1","worked_on":"...","next_steps":"...","heard":"..."}  (only for general comments that are not a skill or a count)
+Names and skill names are often misspelled or misheard by speech recognition. Match each one to the closest name in the data by sound and spelling. When the coach names a batch or center, match people to that batch's or center's kids first: if only one of them is close, it is that kid, without asking. Ask only when two kids fit equally well.
 For several students, use "students":["s1","s2"] instead of "student". For a whole batch use "batch":"b1" and list anyone left out in "except":["s5"]; do not list the batch's students yourself. "Both", "all of them" and pronouns refer to the students just named. If a student name matches several students, or you are unsure, put a short sentence in "unclear" instead of guessing.`;
 
 const CHECK = `You double-check an assistant. Given a coach's words and the actions it proposed, list the actions the words do not clearly support (wrong student, wrong skill, wrong number, wrong status) and anything the coach clearly asked for that is missing. Return only JSON: {"wrong":[{"index":<number>,"why":"..."}],"missing":["..."]}.`;
 
 // ---- Ask anything: the whole tracker as compact text, and a free model answers from it ----
-const ASK_PROMPT = `You are the assistant inside MFU Tracker, used by Mallakhamb coaches. Answer the coach's question using only the data below. Be short and specific: names, numbers, dates. Plain sentences or a short list, no markdown symbols. If the data does not have the answer, say so; never guess or invent people, dates or numbers. Names may be misheard by speech recognition; match them to the closest name in the data.
+const ASK_PROMPT = `You are the assistant inside MFU Tracker, used by Mallakhamb coaches. Answer the coach's question using only the data below. Be short and specific: names, numbers, dates. Plain sentences or a short list, no markdown symbols. If the data does not have the answer, say so; never guess or invent people, dates or numbers.
+Students (the kids) and parents are different people. When the coach asks about kids, students, a batch or a class, answer with students only; mention parents only when asked about parents.
+Names and skill names are often misspelled or misheard by speech recognition. Match each one to the closest name in the data by sound and spelling. When the coach names a batch or center, match people to that batch's or center's kids first: if only one of them is close, it is that kid, without asking. Ask only when two kids fit equally well.
+Skills: the Skills list gives every skill a code. Each student lists the skill codes they are learning and have mastered. A student who has neither for a skill has not started it. So you can answer who has not started, is learning or has mastered any skill, and for a batch use its kid list. Always write skill names, never codes.
 Return only JSON: {"answer":"...","actions":[...]}. "actions" is empty unless the coach asks you to DO one of these two things:
 - {"type":"announcement","title":"...","body":"..."}  (post an announcement to parents)
 - {"type":"practice","demo":"<demo code like d1>","date":"YYYY-MM-DD","start_time":"HH:MM","end_time":"HH:MM","location":"...","notes":"..."}  (schedule a practice for a demo; work out the date from today's date)
@@ -160,18 +164,18 @@ The coach confirms every action before it happens, so say in "answer" what you p
 const rowsOf = async (env, sql) => { try { return (await env.DB.prepare(sql).all()).results; } catch { return []; } };
 
 export async function snapshot(env) {
-  const [centers, coaches, batches, bs, bc, students, links, att, absent, prog, learning, fit, notes, events, demos, ds, practices, meetings, reqs, anns, scores, spots] = await Promise.all([
+  const [centers, coaches, batches, bs, bc, students, links, att, absent, skills, prog, fit, notes, events, demos, ds, practices, meetings, reqs, anns, scores, spots] = await Promise.all([
     'SELECT id,name FROM centers',
     'SELECT id,name,center_id FROM coaches WHERE COALESCE(active,1)=1',
     'SELECT id,name,days,start_time,center_id FROM batches WHERE COALESCE(active,1)=1',
     'SELECT batch_id,student_id FROM batch_students',
     'SELECT batch_id,coach_id FROM batch_coaches',
     'SELECT id,first_name,last_name,center_id,pole_level,rope_level,yoga_level,parent_name,gender FROM students WHERE COALESCE(active,1)=1 ORDER BY first_name,last_name',
-    "SELECT ps.student_id,p.name FROM parent_students ps JOIN parents p ON p.id=ps.parent_id WHERE COALESCE(p.name,'')<>''",
+    "SELECT ps.student_id,p.name,p.id AS parent_id FROM parent_students ps JOIN parents p ON p.id=ps.parent_id WHERE COALESCE(p.name,'')<>''",
     "SELECT student_id,status,COUNT(*) AS n FROM student_attendance WHERE attendance_date>=date('now','-60 days') GROUP BY student_id,status",
     "SELECT student_id,MAX(attendance_date) AS d FROM student_attendance WHERE status='absent' GROUP BY student_id",
-    "SELECT student_id,COUNT(*) AS n FROM student_skill_progress WHERE status='mastered' GROUP BY student_id",
-    "SELECT p.student_id,k.name FROM student_skill_progress p JOIN skills k ON k.id=p.skill_id WHERE p.status='learning'",
+    'SELECT id,apparatus,level,name,COALESCE(general,0) AS general FROM skills WHERE COALESCE(active,1)=1 ORDER BY apparatus,general,level,name',
+    "SELECT student_id,skill_id,status FROM student_skill_progress WHERE status IN ('learning','mastered')",
     'SELECT f.student_id,f.metric,f.value,f.record_date FROM fitness_records f JOIN (SELECT student_id,metric,MAX(record_date) AS d FROM fitness_records GROUP BY student_id,metric) m ON m.student_id=f.student_id AND m.metric=f.metric AND m.d=f.record_date',
     "SELECT n.created_at,n.worked_on,n.next_steps,n.author_name,s.first_name||' '||COALESCE(s.last_name,'') AS student FROM student_notes n JOIN students s ON s.id=n.student_id ORDER BY n.created_at DESC LIMIT 40",
     "SELECT title,event_type,event_date,event_time,location FROM events WHERE event_date>=date('now','-30 days') ORDER BY event_date LIMIT 60",
@@ -186,20 +190,24 @@ export async function snapshot(env) {
   ].map(q => rowsOf(env, q)));
   const by = (rows, key) => { const m = new Map(); for (const r of rows) (m.get(r[key]) || m.set(r[key], []).get(r[key])).push(r); return m; };
   const cn = new Map(centers.map(c => [c.id, c.name])), sn = new Map(students.map(s => [s.id, s.first_name + ' ' + (s.last_name || '')])), bn = new Map(batches.map(b => [b.id, b.name])), kn = new Map(coaches.map(c => [c.id, c.name]));
-  const sb = by(bs, 'student_id'), bsB = by(bs, 'batch_id'), bcB = by(bc, 'batch_id'), pl = by(links, 'student_id'), at = by(att, 'student_id'), lr = by(learning, 'student_id'), ft = by(fit, 'student_id'), dsD = by(ds, 'demo_id'), spD = by(spots, 'demo_id');
-  const ab = new Map(absent.map(r => [r.student_id, r.d])), ms = new Map(prog.map(r => [r.student_id, r.n]));
+  const sb = by(bs, 'student_id'), bsB = by(bs, 'batch_id'), bcB = by(bc, 'batch_id'), pl = by(links, 'student_id'), at = by(att, 'student_id'), pr = by(prog, 'student_id'), ft = by(fit, 'student_id'), dsD = by(ds, 'demo_id'), spD = by(spots, 'demo_id');
+  const ab = new Map(absent.map(r => [r.student_id, r.d])), kc = shortCodes('k', skills);
+  const skillCodes = (id, status) => (pr.get(id) || []).filter(p => p.status === status && kc.to.has(p.skill_id)).map(p => kc.to.get(p.skill_id)).join(' ');
   const demoCodes = shortCodes('d', demos), cut = (v, n) => String(v || '').replace(/\s+/g, ' ').slice(0, n);
   const text = [
     'Today: ' + new Date().toISOString().slice(0, 10) + ' (' + new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }) + ')',
     'Centers: ' + centers.map(c => c.name).join(', '),
     'Coaches (name|center|batches):\n' + coaches.map(c => `${c.name}|${cn.get(c.center_id) || ''}|${bc.filter(x => x.coach_id === c.id).map(x => bn.get(x.batch_id)).filter(Boolean).join(', ')}`).join('\n'),
-    'Batches (name|center|days|start|coaches|number of students):\n' + batches.map(b => `${b.name}|${cn.get(b.center_id) || ''}|${b.days || ''}|${b.start_time || ''}|${(bcB.get(b.id) || []).map(x => kn.get(x.coach_id)).filter(Boolean).join(', ')}|${(bsB.get(b.id) || []).length}`).join('\n'),
-    'Students (name|center|levels pole/rope/yoga|batches|parents|attendance last 60 days present/late/absent/excused|last absent|skills mastered|skills being learned|latest fitness):\n' + students.map(s => {
+    'Batches (name|center|days|start|coaches|kids in it):\n' + batches.map(b => `${b.name}|${cn.get(b.center_id) || ''}|${b.days || ''}|${b.start_time || ''}|${(bcB.get(b.id) || []).map(x => kn.get(x.coach_id)).filter(Boolean).join(', ')}|${(bsB.get(b.id) || []).map(x => sn.get(x.student_id)).filter(Boolean).join(', ')}`).join('\n'),
+    'Skills (code|apparatus|level|name):\n' + skills.map(k => `${kc.to.get(k.id)}|${k.apparatus}|${k.general ? 'general' : 'L' + k.level}|${k.name}`).join('\n'),
+    'Students, the kids (name|center|levels pole/rope/yoga|batches|attendance last 60 days present/late/absent/excused|last absent|skill codes learning|skill codes mastered|latest fitness):\n' + students.map(s => {
       const a = Object.fromEntries((at.get(s.id) || []).map(r => [r.status, r.n]));
       return [sn.get(s.id), cn.get(s.center_id) || '', `${s.pole_level}/${s.rope_level}/${s.yoga_level}`, (sb.get(s.id) || []).map(x => bn.get(x.batch_id)).filter(Boolean).join(', '),
-        [...new Set([s.parent_name, ...(pl.get(s.id) || []).map(x => x.name)].filter(Boolean))].join(', '), `${a.present || 0}/${a.late || 0}/${a.absent || 0}/${a.excused || 0}`, ab.get(s.id) || '', ms.get(s.id) || 0,
-        (lr.get(s.id) || []).slice(0, 6).map(x => x.name).join(', '), (ft.get(s.id) || []).map(f => `${f.metric}=${f.value}`).join(' ')].join('|');
+        `${a.present || 0}/${a.late || 0}/${a.absent || 0}/${a.excused || 0}`, ab.get(s.id) || '', skillCodes(s.id, 'learning'), skillCodes(s.id, 'mastered'),
+        (ft.get(s.id) || []).map(f => `${f.metric}=${f.value}`).join(' ')].join('|');
     }).join('\n'),
+    // Parents apart from the kids, so a question about a batch's kids never pulls parents in.
+    'Parents (parent|their kids):\n' + (() => { const m = new Map(); for (const s of students) { const names = new Set([s.parent_name, ...(pl.get(s.id) || []).map(x => x.name)].filter(Boolean)); for (const n of names) (m.get(n) || m.set(n, []).get(n)).push(sn.get(s.id)); } return [...m].map(([p, kids]) => `${p}|${kids.join(', ')}`).join('\n'); })(),
     'Events (date|type|title|time|place):\n' + events.map(e => `${e.event_date}|${e.event_type}|${e.title}|${e.event_time || ''}|${e.location || ''}`).join('\n'),
     'Demos (code|date|title|start|arrive by|place|kids in it):\n' + demos.map(d => `${demoCodes.to.get(d.id)}|${d.demo_date}|${d.title}|${d.start_time || ''}|${d.arrive_time || ''}|${d.location || ''}|${(dsD.get(d.id) || []).map(x => sn.get(x.student_id)).filter(Boolean).join(', ')}`).join('\n'),
     'Demo pyramids (demo code|pyramid|spots as kid: skill):\n' + demos.filter(d => spD.has(d.id)).flatMap(d => [...by(spD.get(d.id), 'pyramid')].map(([name, sp]) => `${demoCodes.to.get(d.id)}|${name}|${sp.map(x => (x.student?.trim() || 'open') + ': ' + (x.skill || '?')).join('; ')}`)).join('\n'),
@@ -252,7 +260,7 @@ export async function handleAssistant(path, method, request, env) {
   const st = shortCodes('s', students), kc = shortCodes('k', skills), bc = shortCodes('b', batches);
   const rosters = new Map(batches.map(b => [b.id, new Set()]));
   for (const m of members) if (st.to.has(m.student_id)) rosters.get(m.batch_id)?.add(m.student_id);
-  const lists = `Students (code|name):\n${students.map(s => st.to.get(s.id) + '|' + s.first_name + ' ' + (s.last_name || '')).join('\n')}\n\nBatches (code|name|days):\n${batches.map(b => bc.to.get(b.id) + '|' + b.name + '|' + (b.days || '')).join('\n')}\n\nSkills (code|apparatus level|name):\n${skills.map(s => kc.to.get(s.id) + '|' + s.apparatus + ' ' + (s.general ? 'general' : 'L' + s.level) + '|' + s.name).join('\n')}\n\nTests (key|name):\n${metrics.map(m => m[0] + '|' + String(m[1]).slice(0, 60)).join('\n')}`;
+  const lists = `Students (code|name):\n${students.map(s => st.to.get(s.id) + '|' + s.first_name + ' ' + (s.last_name || '')).join('\n')}\n\nBatches (code|name|days|kids in it):\n${batches.map(b => bc.to.get(b.id) + '|' + b.name + '|' + (b.days || '') + '|' + [...(rosters.get(b.id) || [])].map(id => st.to.get(id)).join(' ')).join('\n')}\n\nSkills (code|apparatus level|name):\n${skills.map(s => kc.to.get(s.id) + '|' + s.apparatus + ' ' + (s.general ? 'general' : 'L' + s.level) + '|' + s.name).join('\n')}\n\nTests (key|name):\n${metrics.map(m => m[0] + '|' + String(m[1]).slice(0, 60)).join('\n')}`;
 
   const first = await askFree(env, [{ role: 'system', content: PROMPT + '\n\n' + lists }, { role: 'user', content: text }], { deadline });
   if (!first.data) return json({ error: 'No free AI model answered in time. ' + first.tried.join(' · '), tried: first.tried }, 503);

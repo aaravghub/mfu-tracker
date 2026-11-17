@@ -97,3 +97,23 @@ test('one-tap links: only a parent gets a personal link, and only the bare site 
   assert.equal(saved[0].b[1], 'p1');
   assert.notEqual(saved[0].b[0], token);                // only the hash is stored
 });
+
+test('ask data: batches list their kids, parents are kept apart, and skill status uses codes', async () => {
+  const { snapshot } = await import('../functions/_lib/ai.js');
+  const T = {
+    'FROM centers': [{ id: 'c1', name: 'Princeton' }],
+    'FROM batches': [{ id: 'b1', name: 'Monday Pole', center_id: 'c1', days: 'Mon' }],
+    'FROM batch_students': [{ batch_id: 'b1', student_id: 's1' }, { batch_id: 'b1', student_id: 's2' }],
+    'FROM students': [{ id: 's1', first_name: 'Riya', last_name: 'Shah', center_id: 'c1', pole_level: 1, rope_level: 1, yoga_level: 1, parent_name: 'Meena Shah' }, { id: 's2', first_name: 'Dev', last_name: 'Rao', center_id: 'c1', pole_level: 1, rope_level: 1, yoga_level: 1 }],
+    'FROM skills': [{ id: 'k-a', apparatus: 'pole', level: 1, name: 'Dive', general: 0 }, { id: 'k-b', apparatus: 'pole', level: 2, name: 'Ulti Bagli Tedhi', general: 0 }],
+    'FROM student_skill_progress': [{ student_id: 's1', skill_id: 'k-a', status: 'mastered' }, { student_id: 's1', skill_id: 'k-b', status: 'learning' }]
+  };
+  const env = { DB: { prepare: sql => ({ all: async () => ({ results: Object.entries(T).find(([k]) => sql.includes(k) && !sql.includes('JOIN parents') && !(k === 'FROM students' && !sql.startsWith('SELECT id,first_name')))?.[1] || [] }) }) } };
+  const { text } = await snapshot(env);
+  assert.match(text, /Monday Pole\|Princeton\|Mon\|\|\|Riya Shah, Dev Rao/);
+  assert.match(text, /k2\|pole\|L2\|Ulti Bagli Tedhi/);
+  assert.match(text, /Riya Shah\|Princeton\|1\/1\/1\|Monday Pole\|0\/0\/0\/0\|\|k2\|k1\|/); // learning k2, mastered k1
+  assert.match(text, /Dev Rao\|Princeton\|1\/1\/1\|Monday Pole\|0\/0\/0\/0\|\|\|\|/);         // has started nothing
+  assert.match(text, /Parents \(parent\|their kids\):\nMeena Shah\|Riya Shah/);
+  assert.doesNotMatch(text.split('Students, the kids')[1].split('\n\n')[0], /Meena/);   // no parents in the kids list
+});
